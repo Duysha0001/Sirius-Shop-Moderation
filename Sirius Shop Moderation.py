@@ -339,4 +339,4 @@ async def on_command_error(ctx, error):
     if not isinstance(error, commands.MissingRequiredArgument):
         return
 
-client.run(str(os.environ.get("Sirius_token")))
+client.run(str(os.environ.get('Sirius_token')))
