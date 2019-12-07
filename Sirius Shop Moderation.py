@@ -324,6 +324,7 @@ async def kick_error(ctx, error):
             color=discord.Color.red()
         )
         await ctx.send(embed=Miss)
+        
 @ban.error
 async def ban_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
