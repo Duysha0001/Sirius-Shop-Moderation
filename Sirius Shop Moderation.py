@@ -4,7 +4,7 @@ from discord.ext.commands import Bot
 import asyncio
 import os
 
-client=commands.Bot(command_prefix="'")
+client=commands.Bot(command_prefix=";;")
 bot_id=583016361677160459
 
 def number(s):
