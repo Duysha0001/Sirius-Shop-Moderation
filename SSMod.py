@@ -7,6 +7,7 @@ import os
 client=commands.Bot(command_prefix="'")
 bot_id=583016361677160459
 db_id=653160213607612426
+mute_role_name="Мут"
 
 client.remove_command('help')
 
@@ -209,6 +210,18 @@ async def post_log(guild, log_embed):
         if channel in guild.channels:
             await channel.send(embed=log_embed)
     
+async def setup_mute(guild):
+    global mute_role_name
+    mute_role=discord.utils.get(guild.roles, name=mute_role_name)
+    if not mute_role in guild.roles:
+        await guild.create_role(name=mute_role_name, permissions=discord.Permissions.none())
+        mute_role=discord.utils.get(guild.roles, name=mute_role_name)
+    for channel in guild.text_channels:
+        await channel.set_permissions(mute_role, send_messages=False)
+    for channel in guild.voice_channels:
+        await channel.set_permissions(mute_role, speak=False)
+    
+        
 #=============Commands=============
 @client.command()
 async def help(ctx, *, cmd_name=None):
@@ -217,7 +230,10 @@ async def help(ctx, *, cmd_name=None):
                    "2) **'unmute [**Участник**]**\n"
                    "3) **'kick [**Участник**] [**Причина**]**\n"
                    "4) **'ban [**Участник**] [**Причина**]**\n"
-                   "5) **'unban [**Участник**]**\n")
+                   "5) **'unban [**Участник**]**\n"
+                   "6) **'set_log_channel [**ID канала**]** - *настраивает канал для логов*\n"
+                   "7) **'remove_log_channel [**ID канала**]** - *отвязывает канал от логов*\n"
+                   "8) **'set_mute_role** - *перенастраивает роль мута в каждом канале*")
     user_help_list=""
     
     help_msg=discord.Embed(
@@ -261,13 +277,13 @@ async def remove_log_channel(ctx, channel_id):
 @client.command()
 async def mute(ctx, member: discord.Member, raw_time, *, reason="не указана"):
     global bot_id
+    global mute_role_name
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
-    Blacklist="Мут"
-    Mute = discord.utils.get(ctx.author.guild.roles, name=Blacklist)
+    Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     if not Mute in ctx.guild.roles:
-        await ctx.guild.create_role(name=Blacklist, permissions=discord.Permissions.none())
-        Mute = discord.utils.get(ctx.author.guild.roles, name=Blacklist)
+        await setup_mute(ctx.guild)
+        Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
     if not await has_helper(ctx.author, ctx.guild):
         reply=discord.Embed(
@@ -322,6 +338,7 @@ async def mute(ctx, member: discord.Member, raw_time, *, reason="не указа
                         )
                         await ctx.send(embed=log)
                         await post_log(ctx.guild, log)
+                        await member.send(f"Вы были заглушены на сервере **{ctx.guild.name}** на **{raw_time}** {stamp}\nПричина: {reason}")
                         await asyncio.sleep(time)
                         if Mute in member.roles:
                             await member.remove_roles(Mute)
@@ -338,14 +355,13 @@ async def mute(ctx, member: discord.Member, raw_time, *, reason="не указа
 @client.command()
 async def unmute(ctx, member: discord.Member):
     global bot_id
+    global mute_role_name
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
-    Blacklist="Мут"
-    
-    Mute = discord.utils.get(ctx.author.guild.roles, name=Blacklist)
+    Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     if not Mute in ctx.guild.roles:
-        await ctx.guild.create_role(name=Blacklist, permissions=discord.Permissions.none())
-        Mute = discord.utils.get(ctx.author.guild.roles, name=Blacklist)
+        await setup_mute(ctx.guild)
+        Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
     if not await has_helper(ctx.author, ctx.guild):
         reply=discord.Embed(
@@ -512,6 +528,17 @@ async def unban(ctx, *, member=None):
                 await post_log(ctx.guild, log)
                 await unbanned.send(f"Вы были разбанены на сервере **{ctx.guild.name}**")
 
+@client.command()
+async def set_mute_role(ctx):
+    await ctx.send("🕑 пожалуйста, подождите...")
+    await setup_mute(ctx.guild)
+    log=discord.Embed(
+        title="✅Настройка завершена",
+        description="Роль мута настроена во всех каналах без явных ошибок",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=log)
+    
 #=====================Errors==========================
 @mute.error
 async def mute_error(ctx, error):
