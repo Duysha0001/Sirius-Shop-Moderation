@@ -170,7 +170,7 @@ async def black(ctx):
     Blist=""
     Muted=discord.utils.get(ctx.author.guild.roles, name=bl_role)
     if not Muted in ctx.guild.roles:
-        await ctx.send(f"There're no any roles named **{bl_role}**")
+        await ctx.send(f"На этом сервере еще не создана роль с названием **{bl_role}**")
     else:
         for m in ctx.author.guild.members:
             if Muted in m.roles:
@@ -324,7 +324,6 @@ async def kick_error(ctx, error):
             color=discord.Color.red()
         )
         await ctx.send(embed=Miss)
-        
 @ban.error
 async def ban_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
@@ -339,5 +338,5 @@ async def ban_error(ctx, error):
 async def on_command_error(ctx, error):
     if not isinstance(error, commands.MissingRequiredArgument):
         return
-
+    
 client.run(str(os.environ.get('SIRIUS_TOKEN')))
