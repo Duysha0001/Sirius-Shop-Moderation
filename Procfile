@@ -1,1 +1,1 @@
-worker: python Sirius Shop Moderation.py
+worker: python SSMod.py
