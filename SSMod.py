@@ -6,6 +6,9 @@ import os
 
 client=commands.Bot(command_prefix="'")
 bot_id=583016361677160459
+db_id=653160213607612426
+
+client.remove_command('help')
 
 def number(s):
     check=True
@@ -18,8 +21,143 @@ def number(s):
 
 @client.event
 async def on_ready():
+    global bot_id
     print("Ready to moderate")
+    if "583016361677160459"!=str(bot_id):
+        print("Code isn't currently running Sirius Shop Bot")
 
+#========Minor tools=======
+def to_raw(data_list):
+    out=""
+    for elem in data_list:
+        out+=str(elem)+";"
+    return out
+
+def to_list(data_raw):
+    out=[]
+    elem=""
+    for letter in data_raw:
+        if letter==";":
+            out.append(elem)
+            elem=""
+        else:
+            elem+=letter
+    return out
+    
+#========Databse functions=======
+async def post_data(folder, key_word, data_list):
+    global db_id
+    db_server=client.get_guild(db_id)
+    
+    data_raw=to_raw(data_list)
+    folders=[c.name for c in db_server.channels]
+    
+    if not folder in folders:
+        await db_server.create_text_channel(folder)
+    folder = discord.utils.get(db_server.channels, name=folder)
+    check=0
+    async for file in folder.history(limit=100):
+        if file.content==f"{key_word};{data_raw}":
+            check=1
+            break
+    if check==0:
+        await folder.send(f"{key_word};{data_raw}")
+    
+async def get_data(folder, key_word):
+    global db_id
+    db_server=client.get_guild(db_id)
+    
+    folders=[c.name for c in db_server.channels]
+    
+    if not folder in folders:
+        return "Error"
+    else:
+        folder = discord.utils.get(db_server.channels, name=folder)
+        data=None
+        async for file in folder.history(limit=100):
+            data_list=to_list(file.content)
+            if data_list[0]==key_word:
+                data=data_list[1:len(data_list)]
+                break
+        if data==None:
+            return "Error"
+        else:
+            return data
+
+async def edit_data(folder, key_word, edit_list):
+    global db_id
+    db_server=client.get_guild(db_id)
+    
+    folders=[c.name for c in db_server.channels]
+    
+    if not folder in folders:
+        return "Error"
+    else:
+        folder = discord.utils.get(db_server.channels, name=folder)
+        data=None
+        async for file in folder.history(limit=100):
+            data_list=to_list(file.content)
+            if data_list[0]==key_word:
+                data=file
+        if data==None:
+            return "Error"
+        else:
+            edit_raw=to_raw(edit_list)
+            await data.edit(content=f"{key_word};{edit_raw}")
+            
+async def delete_data(folder, key_word):
+    global db_id
+    db_server=client.get_guild(db_id)
+    
+    folders=[c.name for c in db_server.channels]
+    
+    if not folder in folders:
+        return "Error"
+    else:
+        folder = discord.utils.get(db_server.channels, name=folder)
+        data=None
+        async for file in folder.history(limit=100):
+            data_list=to_list(file.content)
+            if data_list[0]==key_word:
+                data=file
+        if data==None:
+            return "Error"
+        else:
+            await data.delete()
+            
+async def delete_folder(folder):
+    global db_id
+    db_server=client.get_guild(db_id)
+    
+    folders=[c.name for c in db_server.channels]
+    
+    if not folder in folders:
+        return "Error"
+    else:
+        folder = discord.utils.get(db_server.channels, name=folder)
+        await folder.delete()
+        
+async def get_folder(folder):
+    global db_id
+    db_server=client.get_guild(db_id)
+    
+    folders=[c.name for c in db_server.channels]
+    
+    if not folder in folders:
+        return "Error"
+    else:
+        folder = discord.utils.get(db_server.channels, name=folder)
+        folder_list=[]
+        prev_id=None
+        async for file in folder.message_history(limit=100):
+            if file.id==prev_id:
+                break
+            else:
+                prev_id=file.id
+                folder_list.append(to_list(file.content))
+        return folder_list
+
+#============Bot async funcs==========
 async def has_helper(user, guild):
     mmcheck=False
     if guild.owner.id==user.id:
@@ -37,7 +175,25 @@ async def has_admin(user, guild):
         if r.permissions.administrator:
             mmcheck=True
     return mmcheck
-    
+
+async def can_kick(user, guild):
+    mmcheck=False
+    if guild.owner.id==user.id:
+        mmcheck=True
+    for r in user.roles:
+        if r.permissions.administrator or r.permissions.kick_members:
+            mmcheck=True
+    return mmcheck
+
+async def can_ban(user, guild):
+    mmcheck=False
+    if guild.owner.id==user.id:
+        mmcheck=True
+    for r in user.roles:
+        if r.permissions.administrator or r.permissions.ban_members:
+            mmcheck=True
+    return mmcheck
+
 async def glob_pos(user):
     pos=0
     for r in user.roles:
@@ -45,7 +201,63 @@ async def glob_pos(user):
             pos=r.position
     return pos
 
+async def post_log(guild, log_embed):
+    channel_id=await get_data("log-channels", str(guild.id))
+    if not channel_id=="Error":
+        channel_id=int(channel_id[0])
+        channel=discord.utils.get(guild.channels, id=channel_id)
+        if channel in guild.channels:
+            await channel.send(embed=log_embed)
+    
 #=============Commands=============
+@client.command()
+async def help(ctx, *, cmd_name=None):
+    #if cmd_name==None:
+    adm_help_list=("1) **'mute [**Участник**] [**Время**] [**Причина**]**\n"
+                   "2) **'unmute [**Участник**]**\n"
+                   "3) **'kick [**Участник**] [**Причина**]**\n"
+                   "4) **'ban [**Участник**] [**Причина**]**\n"
+                   "5) **'unban [**Участник**]**\n")
+    user_help_list=""
+    
+    help_msg=discord.Embed(
+        title="Help menu",
+        color=discord.Color.from_rgb(201, 236, 160)
+        )
+    help_msg.add_field(name="**Moderator commands**", value=adm_help_list, inline=False)
+    
+    await ctx.send(embed=help_msg)
+
+@client.command()
+async def set_log_channel(ctx, channel_id):
+    channel_IDs=[str(c.id) for c in ctx.guild.channels]
+    if not channel_id in channel_IDs:
+        await ctx.send("Канал не найден")
+    else:
+        channel=discord.utils.get(ctx.guild.channels, id=int(channel_id))
+        await post_data("log-channels", str(ctx.guild.id), [channel_id])
+        reply=discord.Embed(
+            title="Настройка завершена",
+            description=f"Канал для логов успешно настроен как {channel.mention}",
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=reply)
+
+@client.command()
+async def remove_log_channel(ctx, channel_id):
+    channel_IDs=[str(c.id) for c in ctx.guild.channels]
+    if not channel_id in channel_IDs:
+        await ctx.send("Канал не найден")
+    else:
+        channel=discord.utils.get(ctx.guild.channels, id=int(channel_id))
+        await delete_data("log-channels", str(ctx.guild.id))
+        reply=discord.Embed(
+            title="Канал отвязан",
+            description=f"Канал для логов успешно отвязан от {channel.mention}",
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=reply)
+
 @client.command()
 async def mute(ctx, member: discord.Member, raw_time, *, reason="не указана"):
     global bot_id
@@ -109,6 +321,7 @@ async def mute(ctx, member: discord.Member, raw_time, *, reason="не указа
                             color=discord.Color.darker_grey()
                         )
                         await ctx.send(embed=log)
+                        await post_log(ctx.guild, log)
                         await asyncio.sleep(time)
                         if Mute in member.roles:
                             await member.remove_roles(Mute)
@@ -120,6 +333,7 @@ async def mute(ctx, member: discord.Member, raw_time, *, reason="не указа
                                 color=discord.Color.darker_grey()
                             )
                             await ctx.send(embed=log)
+                            await post_log(ctx.guild, log)
 
 @client.command()
 async def unmute(ctx, member: discord.Member):
@@ -156,6 +370,7 @@ async def unmute(ctx, member: discord.Member):
                     color=discord.Color.darker_grey()
                 )
                 await ctx.send(embed=log)
+                await post_log(ctx.guild, log)
         else:
             log=discord.Embed(
                 title='Пользователь не заблокирован',
@@ -186,7 +401,7 @@ async def kick(ctx, member: discord.Member, *, reason="не указана"):
     global bot_id
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
-    if not await has_admin(ctx.author, ctx.guild):
+    if not await can_kick(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Недостаточно прав",
             color=discord.Color.red()
@@ -218,6 +433,7 @@ async def kick(ctx, member: discord.Member, *, reason="не указана"):
                     color=discord.Color.blurple()
                 )
                 await ctx.send(embed=log)
+                await post_log(ctx.guild, log)
                 await member.send(f"Вы были кикнуты с сервера **{ctx.guild.name}**.\n**Причина:** {reason}")
                 
 @client.command()
@@ -225,7 +441,7 @@ async def ban(ctx, member: discord.Member, *, reason="не указана"):
     global bot_id
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
-    if not await has_admin(ctx.author, ctx.guild):
+    if not await can_ban(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Недостаточно прав",
             color=discord.Color.red()
@@ -256,11 +472,12 @@ async def ban(ctx, member: discord.Member, *, reason="не указана"):
                     color=discord.Color.dark_red()
                 )
                 await ctx.send(embed=log)
+                await post_log(ctx.guild, log)
                 await member.send(f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}")
 
 @client.command()
 async def unban(ctx, *, member=None):
-    if not await has_admin(ctx.author, ctx.guild):
+    if not await can_ban(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Недостаточно прав",
             color=discord.Color.red()
@@ -292,6 +509,7 @@ async def unban(ctx, *, member=None):
                     color=discord.Color.dark_green()
                 )
                 await ctx.send(embed=log)
+                await post_log(ctx.guild, log)
                 await unbanned.send(f"Вы были разбанены на сервере **{ctx.guild.name}**")
 
 #=====================Errors==========================
@@ -333,7 +551,26 @@ async def ban_error(ctx, error):
             color=discord.Color.red()
         )
         await ctx.send(embed=Miss)
+
+@set_log_channel.error
+async def set_log_channel_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        Miss=discord.Embed(
+            title=':hourglass: Недостаточно аргументов :hourglass:',
+            description=f"Попробуйте снова, следуя формату\n**'set_log_channel [**ID канала**]**\nНапример:\n**'set_log_channel {ctx.channel.id}**",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=Miss)
         
+@remove_log_channel.error
+async def remove_log_channel_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        Miss=discord.Embed(
+            title=':hourglass: Недостаточно аргументов :hourglass:',
+            description=f"Попробуйте снова, следуя формату\n**'remove_log_channel [**ID канала**]**\nНапример:\n**'remove_log_channel {ctx.channel.id}**",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=Miss)
 @client.event
 async def on_command_error(ctx, error):
     if not isinstance(error, commands.MissingRequiredArgument):
