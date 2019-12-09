@@ -11,6 +11,7 @@ mute_role_name="Мут"
 
 client.remove_command('help')
 
+#========Bot minor tools=======
 def number(s):
     check=True
     nums=[str(i) for i in range(10)]
@@ -20,6 +21,21 @@ def number(s):
             break
     return check
 
+def word_compare(word, ethalone):
+    out=0
+    last_found=-1
+    for letter in word:
+        step=0
+        check=0
+        while step<len(ethalone) and check==0:
+            if ethalone[step].lower()==letter.lower() and step>last_found:
+                out+=1
+                last_found=step
+                check=1
+            step+=1
+    return out/max(len(word), len(ethalone))
+
+#=========Ready event============
 @client.event
 async def on_ready():
     global bot_id
@@ -222,25 +238,39 @@ async def setup_mute(guild):
         await channel.set_permissions(mute_role, speak=False)
     
         
+async def detect_member(guild, raw_search):
+    status="Error"
+    for m in guild.members:
+        if raw_search==m.mention:
+            status=m
+            break
+    if status=="Error":
+        members=[str(m.id) for m in guild.members]
+        if raw_search in members:
+            status=discord.utils.get(guild.members, id=int(raw_search))
+    return status
+    
 #=============Commands=============
 @client.command()
 async def help(ctx, *, cmd_name=None):
     #if cmd_name==None:
     adm_help_list=("1) **'mute [**Участник**] [**Время**] [**Причина**]**\n"
                    "2) **'unmute [**Участник**]**\n"
-                   "3) **'kick [**Участник**] [**Причина**]**\n"
-                   "4) **'ban [**Участник**] [**Причина**]**\n"
-                   "5) **'unban [**Участник**]**\n"
-                   "6) **'set_log_channel [**ID канала**]** - *настраивает канал для логов*\n"
-                   "7) **'remove_log_channel [**ID канала**]** - *отвязывает канал от логов*\n"
-                   "8) **'set_mute_role** - *перенастраивает роль мута в каждом канале*")
-    user_help_list=""
+                   "3) **'black** - *список заблокированных пользователей*"
+                   "4) **'kick [**Участник**] [**Причина**]**\n"
+                   "5) **'ban [**Участник**] [**Причина**]**\n"
+                   "6) **'unban [**Участник**]**\n"
+                   "7) **'set_log_channel [**ID канала**]** - *настраивает канал для логов*\n"
+                   "8) **'remove_log_channel [**ID канала**]** - *отвязывает канал от логов*\n"
+                   "9) **'set_mute_role** - *перенастраивает роль мута в каждом канале*")
+    user_help_list=("1) **'search [**Запрос/ID**]**")
     
     help_msg=discord.Embed(
         title="Help menu",
         color=discord.Color.from_rgb(201, 236, 160)
         )
-    help_msg.add_field(name="**Moderator commands**", value=adm_help_list, inline=False)
+    help_msg.add_field(name="**Команды пользователей**", value=user_help_list, inline=False)
+    help_msg.add_field(name="**Команды модераторов**", value=adm_help_list, inline=False)
     
     await ctx.send(embed=help_msg)
 
@@ -275,125 +305,145 @@ async def remove_log_channel(ctx, channel_id):
         await ctx.send(embed=reply)
 
 @client.command()
-async def mute(ctx, member: discord.Member, raw_time, *, reason="не указана"):
+async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
     global bot_id
     global mute_role_name
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
-    
     Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
-    if not Mute in ctx.guild.roles:
-        await setup_mute(ctx.guild)
-        Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
-    if not await has_helper(ctx.author, ctx.guild):
+    member=await detect_member(ctx.guild, raw_user)
+    if member=="Error":
         reply=discord.Embed(
-            title="❌Недостаточно прав",
+            title="❌Пользователь не найден",
+            description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
             color=discord.Color.red()
-        )
+            )
         await ctx.send(embed=reply)
-    else:
-        AbrList=['s','m','h']
-        DurList=[1,60,3600]
-        Names=['сек.','мин.','ч.']
-        if not raw_time[len(raw_time)-1] in AbrList:
+        
+    else:  
+        if not Mute in ctx.guild.roles:
+            await setup_mute(ctx.guild)
+            Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
+        
+        if not await has_helper(ctx.author, ctx.guild):
             reply=discord.Embed(
-                title="❌Неверный формат",
-                description="Укажите время так: **[Число]m**\n\n**s** - секунды, **m** - минуты, **h** - часы",
+                title="❌Недостаточно прав",
                 color=discord.Color.red()
             )
             await ctx.send(embed=reply)
         else:
-            index=AbrList.index(raw_time[len(raw_time)-1])
-            dur=DurList[index]
-            raw_time=raw_time[0:len(raw_time)-1]
-            stamp=Names[index]
-            if not number(raw_time):
+            AbrList=['s','m','h']
+            DurList=[1,60,3600]
+            Names=['сек.','мин.','ч.']
+            if not raw_time[len(raw_time)-1] in AbrList:
                 reply=discord.Embed(
                     title="❌Неверный формат",
-                    description=f"[{raw_time}] должно быть целым числом",
+                    description="Укажите время так: **[Число]m**\n\n**s** - секунды, **m** - минуты, **h** - часы",
                     color=discord.Color.red()
                 )
                 await ctx.send(embed=reply)
             else:
-                time=int(raw_time)*dur
-                if time>86400:
-                    await ctx.send("Мут не может быть осуществлён больше, чем на 24 часа")
+                index=AbrList.index(raw_time[len(raw_time)-1])
+                dur=DurList[index]
+                raw_time=raw_time[0:len(raw_time)-1]
+                stamp=Names[index]
+                if not number(raw_time):
+                    reply=discord.Embed(
+                        title="❌Неверный формат",
+                        description=f"[{raw_time}] должно быть целым числом",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
                 else:
-                    if await glob_pos(member)>=await glob_pos(bot_user):
-                        reply=discord.Embed(
-                            title="⚠Ошибка",
-                            description=(f"Моя роль не выше роли пользователя {member}\n"
-                                         "Чтобы исправить это, перетащите какую-либо из моих ролей выше"),
-                            color=discord.Color.gold()
-                        )
-                        await ctx.send(embed=reply)
+                    time=int(raw_time)*dur
+                    if time>86400:
+                        await ctx.send("Мут не может быть осуществлён больше, чем на 24 часа")
                     else:
-                        await member.add_roles(Mute)
-                        log=discord.Embed(
-                            title=':lock: Пользователь заблокирован',
-                            description=(f"**{member.mention}** был заблокирован на **{raw_time}** {stamp}\n"
-                                         f"Мут наложен пользователем {ctx.author.mention}\n"
-                                         f"**Причина:** {reason}"),
-                            color=discord.Color.darker_grey()
-                        )
-                        await ctx.send(embed=log)
-                        await post_log(ctx.guild, log)
-                        await member.send(f"Вы были заглушены на сервере **{ctx.guild.name}** на **{raw_time}** {stamp}\nПричина: {reason}")
-                        await asyncio.sleep(time)
-                        if Mute in member.roles:
-                            await member.remove_roles(Mute)
+                        if await glob_pos(member)>=await glob_pos(bot_user):
+                            reply=discord.Embed(
+                                title="⚠Ошибка",
+                                description=(f"Моя роль не выше роли пользователя {member}\n"
+                                             "Чтобы исправить это, перетащите какую-либо из моих ролей выше"),
+                                color=discord.Color.gold()
+                            )
+                            await ctx.send(embed=reply)
+                        else:
+                            await member.add_roles(Mute)
                             log=discord.Embed(
-                                title=':key: Пользователь разблокирован',
-                                description=(f"**{member.mention}** был разблокирован\n"
-                                             f"Ранне был заблокирован пользователем {ctx.author.mention}\n"
-                                             f"Причина: {reason}"),
+                                title=':lock: Пользователь заблокирован',
+                                description=(f"**{member.mention}** был заблокирован на **{raw_time}** {stamp}\n"
+                                             f"Мут наложен пользователем {ctx.author.mention}\n"
+                                             f"**Причина:** {reason}"),
                                 color=discord.Color.darker_grey()
                             )
                             await ctx.send(embed=log)
                             await post_log(ctx.guild, log)
+                            await member.send(f"Вы были заглушены на сервере **{ctx.guild.name}** на **{raw_time}** {stamp}\nПричина: {reason}")
+                            await asyncio.sleep(time)
+                            if Mute in member.roles:
+                                await member.remove_roles(Mute)
+                                log=discord.Embed(
+                                    title=':key: Пользователь разблокирован',
+                                    description=(f"**{member.mention}** был разблокирован\n"
+                                                 f"Ранне был заблокирован пользователем {ctx.author.mention}\n"
+                                                 f"Причина: {reason}"),
+                                    color=discord.Color.darker_grey()
+                                )
+                                #await ctx.send(embed=log)
+                                await post_log(ctx.guild, log)
 
 @client.command()
-async def unmute(ctx, member: discord.Member):
+async def unmute(ctx, raw_user):
     global bot_id
     global mute_role_name
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
-    
     Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
-    if not Mute in ctx.guild.roles:
-        await setup_mute(ctx.guild)
-        Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
-    if not await has_helper(ctx.author, ctx.guild):
+    member=await detect_member(ctx.guild, raw_user)
+    if member=="Error":
         reply=discord.Embed(
-            title="❌Недостаточно прав",
+            title="❌Пользователь не найден",
+            description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
             color=discord.Color.red()
-        )
+            )
         await ctx.send(embed=reply)
-        if Mute in member.roles:
-            if await glob_pos(member)>=await glob_pos(bot_user):
-                reply=discord.Embed(
-                    title="⚠Ошибка",
-                    description=(f"Моя роль не выше роли пользователя {member}\n"
-                               "Чтобы исправить это, перетащите какую-либо из моих ролей выше"),
-                    color=discord.Color.gold()
-                )
-                await ctx.send(embed=reply)
+    
+    else:
+        if not Mute in ctx.guild.roles:
+            await setup_mute(ctx.guild)
+            Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
+        
+        if not await has_helper(ctx.author, ctx.guild):
+            reply=discord.Embed(
+                title="❌Недостаточно прав",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=reply)
+            if Mute in member.roles:
+                if await glob_pos(member)>=await glob_pos(bot_user):
+                    reply=discord.Embed(
+                        title="⚠Ошибка",
+                        description=(f"Моя роль не выше роли пользователя {member}\n"
+                                   "Чтобы исправить это, перетащите какую-либо из моих ролей выше"),
+                        color=discord.Color.gold()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    await member.remove_roles(Mute)
+                    log=discord.Embed(
+                        title=':key: Пользователь разблокирован',
+                        description=f'**{member.mention}** был разблокирован',
+                        color=discord.Color.darker_grey()
+                    )
+                    await ctx.send(embed=log)
+                    await post_log(ctx.guild, log)
             else:
-                await member.remove_roles(Mute)
                 log=discord.Embed(
-                    title=':key: Пользователь разблокирован',
-                    description=f'**{member.mention}** был разблокирован',
+                    title='Пользователь не заблокирован',
+                    description=f'**{member.mention}** не заблокирован **;black**',
                     color=discord.Color.darker_grey()
                 )
                 await ctx.send(embed=log)
-                await post_log(ctx.guild, log)
-        else:
-            log=discord.Embed(
-                title='Пользователь не заблокирован',
-                description=f'**{member.mention}** не заблокирован **;black**',
-                color=discord.Color.darker_grey()
-            )
-            await ctx.send(embed=log)
                 
 @client.command(aliases=["blacklist"])
 async def black(ctx):
@@ -413,7 +463,7 @@ async def black(ctx):
         await ctx.send(embed=BlackList)
 
 @client.command()
-async def kick(ctx, member: discord.Member, *, reason="не указана"):
+async def kick(ctx, raw_user, *, reason="не указана"):
     global bot_id
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
@@ -424,36 +474,46 @@ async def kick(ctx, member: discord.Member, *, reason="не указана"):
         )
         await ctx.send(embed=reply)
     else:
-        if await glob_pos(ctx.author) <= await glob_pos(member):
+        member=await detect_member(ctx.guild, raw_user)
+        if member=="Error":
             reply=discord.Embed(
-                title="❌Недостаточно прав",
-                description=f"Вы не можете кикнуть **{member.name}**, его роль не ниже Вашей",
+                title="❌Пользователь не найден",
+                description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
                 color=discord.Color.red()
             )
             await ctx.send(embed=reply)
+        
         else:
-            if await glob_pos(member)>=await glob_pos(bot_user):
+            if await glob_pos(ctx.author) <= await glob_pos(member):
                 reply=discord.Embed(
-                    title="⚠Ошибка",
-                    description=(f"Моя роль не выше роли пользователя {member}\n"
-                                 "Чтобы исправить это, перетащите какую-либо из моих ролей выше"),
-                    color=discord.Color.gold()
+                    title="❌Недостаточно прав",
+                    description=f"Вы не можете кикнуть **{member.name}**, его роль не ниже Вашей",
+                    color=discord.Color.red()
                 )
                 await ctx.send(embed=reply)
             else:
-                await member.kick(reason=reason)
-                log=discord.Embed(
-                    title=f"**{member}** был кикнут",
-                    description=(f"**Причина:** {reason}\n"
-                                 f"Кикнут пользователем: {ctx.author.mention}"),
-                    color=discord.Color.blurple()
-                )
-                await ctx.send(embed=log)
-                await post_log(ctx.guild, log)
-                await member.send(f"Вы были кикнуты с сервера **{ctx.guild.name}**.\n**Причина:** {reason}")
+                if await glob_pos(member)>=await glob_pos(bot_user):
+                    reply=discord.Embed(
+                        title="⚠Ошибка",
+                        description=(f"Моя роль не выше роли пользователя {member}\n"
+                                     "Чтобы исправить это, перетащите какую-либо из моих ролей выше"),
+                        color=discord.Color.gold()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    await member.kick(reason=reason)
+                    log=discord.Embed(
+                        title=f"**{member}** был кикнут",
+                        description=(f"**Причина:** {reason}\n"
+                                     f"Кикнут пользователем: {ctx.author.mention}"),
+                        color=discord.Color.blurple()
+                    )
+                    await ctx.send(embed=log)
+                    await post_log(ctx.guild, log)
+                    await member.send(f"Вы были кикнуты с сервера **{ctx.guild.name}**.\n**Причина:** {reason}")
                 
 @client.command()
-async def ban(ctx, member: discord.Member, *, reason="не указана"):
+async def ban(ctx, raw_user, *, reason="не указана"):
     global bot_id
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
@@ -464,32 +524,42 @@ async def ban(ctx, member: discord.Member, *, reason="не указана"):
         )
         await ctx.send(embed=reply)
     else:
-        if await glob_pos(ctx.author) <= await glob_pos(member):
+        member=await detect_member(ctx.guild, raw_user)
+        if member=="Error":
             reply=discord.Embed(
-                title="❌Недостаточно прав",
-                description=f"Вы не можете забанить **{member.name}**, его роль не ниже Вашей",
+                title="❌Пользователь не найден",
+                description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
                 color=discord.Color.red()
             )
             await ctx.send(embed=reply)
+            
         else:
-            if await glob_pos(member)>=await glob_pos(bot_user):
+            if await glob_pos(ctx.author) <= await glob_pos(member):
                 reply=discord.Embed(
-                    title="⚠Ошибка",
-                    description=(f"Моя роль не выше роли пользователя {member}\n"
-                                 "Чтобы исправить это, перетащите какую-либо из моих ролей выше"),
-                    color=discord.Color.gold()
+                    title="❌Недостаточно прав",
+                    description=f"Вы не можете забанить **{member.name}**, его роль не ниже Вашей",
+                    color=discord.Color.red()
                 )
                 await ctx.send(embed=reply)
             else:
-                await member.ban(reason=reason)
-                log=discord.Embed(
-                    title=f"**{member}** был забанен",
-                    description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}",
-                    color=discord.Color.dark_red()
-                )
-                await ctx.send(embed=log)
-                await post_log(ctx.guild, log)
-                await member.send(f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}")
+                if await glob_pos(member)>=await glob_pos(bot_user):
+                    reply=discord.Embed(
+                        title="⚠Ошибка",
+                        description=(f"Моя роль не выше роли пользователя {member}\n"
+                                     "Чтобы исправить это, перетащите какую-либо из моих ролей выше"),
+                        color=discord.Color.gold()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    await member.ban(reason=reason)
+                    log=discord.Embed(
+                        title=f"**{member}** был забанен",
+                        description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}",
+                        color=discord.Color.dark_red()
+                    )
+                    await ctx.send(embed=log)
+                    await post_log(ctx.guild, log)
+                    await member.send(f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}")
 
 @client.command()
 async def unban(ctx, *, member=None):
@@ -510,11 +580,17 @@ async def unban(ctx, *, member=None):
         else:
             unbanned=None
             banned_users=await ctx.guild.bans()
-            member_name, member_discriminator=member.split('#')
-            for ban_entry in banned_users:
-                user=ban_entry.user
-                if (user.name, user.discriminator)==(member_name, member_discriminator):
-                    unbanned=user
+            if number(member) and len(member)==18:
+                for ban_entry in banned_users:
+                    user=ban_entry.user
+                    if str(user.id)==member:
+                        unbanned=user
+            else:
+                member_name, member_discriminator=member.split('#')
+                for ban_entry in banned_users:
+                    user=ban_entry.user
+                    if (user.name, user.discriminator)==(member_name, member_discriminator):
+                        unbanned=user
             if unbanned==None:
                 await ctx.send(f"**{member}** нет в списке банов")
             else:
@@ -538,6 +614,48 @@ async def set_mute_role(ctx):
         color=discord.Color.green()
     )
     await ctx.send(embed=log)
+    
+@client.command()
+async def search(ctx, raw_request):
+    if number(raw_request) and len(raw_request)==18:
+        for m in ctx.guild.members:
+            if str(m.id)==raw_request:
+                nick=m.nick
+                if str(m.nick)=="None":
+                    nick=m.name
+                reply=discord.Embed(
+                    title="Поиск пользователья по ID",
+                    description=(f"**Тег:** {m}\n"
+                                 f"**Пинг:** {m.mention}\n"
+                                 f"**Ник на сервере:** {nick}\n"
+                                 f"**ID:** {m.id}"),
+                    color=discord.Color.blurple()
+                )
+                await ctx.send(embed=reply)
+                break
+    else:
+        out=[]
+        for m in ctx.guild.members:
+            user_simil=word_compare(raw_request, str(m))
+            member_simil=word_compare(raw_request, str(m.nick))
+            
+            if user_simil>=0.5 or member_simil>=0.5:
+                out.append(int(m.id))
+            if len(out)>24:
+                break
+        desc=""
+        for i in range(len(out)):
+            res=discord.utils.get(ctx.guild.members, id=out[i])
+            res_data=f"{res.mention} ({res}); **ID:** {res.id}\n"
+            desc+=res_data
+        if desc=="":
+            desc="Нет результатов"
+        results=discord.Embed(
+            title="Результаты поиска:",
+            description=desc,
+            color=discord.Color.teal()
+        )
+        await ctx.send(embed=results)
     
 #=====================Errors==========================
 @mute.error
