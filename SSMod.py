@@ -637,7 +637,12 @@ async def search(ctx, raw_request):
         out=[]
         for m in ctx.guild.members:
             user_simil=word_compare(raw_request, str(m))
-            member_simil=word_compare(raw_request, str(m.nick))
+            
+            server_name=str(m.nick)
+            if server_name=="None":
+                server_name=str(m.name)
+            
+            member_simil=word_compare(raw_request, server_name)
             
             if user_simil>=0.5 or member_simil>=0.5:
                 out.append(int(m.id))
