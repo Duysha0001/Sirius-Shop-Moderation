@@ -2,9 +2,11 @@ import discord
 from discord.ext import commands
 from discord.ext.commands import Bot
 import asyncio
+import datetime
 import os
 
-client=commands.Bot(command_prefix="'")
+prefix="'"
+client=commands.Bot(command_prefix=prefix)
 bot_id=583016361677160459
 db_id=653160213607612426
 mute_role_name="Мут"
@@ -35,13 +37,39 @@ def word_compare(word, ethalone):
             step+=1
     return out/max(len(word), len(ethalone))
 
+def without_seps(text):
+    out=""
+    for elem in text:
+        if elem!=";":
+            out+=elem
+    return out
+    
+def all_ints(word):
+    out=[]
+    nums=[str(i) for i in range(10)]
+    number=""
+    for letter in word:
+        if not letter in nums:
+            if number!="":
+                out.append(int(number))
+            number=""
+        else:
+            number+=letter
+    return out
+
+def datetime_from_list(dt_list):
+    return datetime.datetime(dt_list[0],dt_list[1],dt_list[2],dt_list[3],dt_list[4],dt_list[5])
+
 #=========Ready event============
 @client.event
 async def on_ready():
     global bot_id
+    global prefix
     print("Ready to moderate")
     if "583016361677160459"!=str(bot_id):
         print("Code isn't currently running Sirius Shop Bot")
+    if prefix!="'":
+        print(f"Current prefix is {prefix}, don't forget to change it to '")
 
 #========Minor tools=======
 def to_raw(data_list):
@@ -62,7 +90,7 @@ def to_list(data_raw):
     return out
     
 #========Databse functions=======
-async def post_data(folder, key_word, data_list):
+async def post_data(folder, data_list):
     global db_id
     db_server=client.get_guild(db_id)
     
@@ -74,73 +102,77 @@ async def post_data(folder, key_word, data_list):
     folder = discord.utils.get(db_server.channels, name=folder)
     check=0
     async for file in folder.history(limit=100):
-        if file.content==f"{key_word};{data_raw}":
+        if file.content==data_raw:
             check=1
             break
     if check==0:
-        await folder.send(f"{key_word};{data_raw}")
+        await folder.send(data_raw)
     
-async def get_data(folder, key_word):
-    global db_id
-    db_server=client.get_guild(db_id)
+async def get_data(folder, key_words):
+    folder_files=await get_folder(folder)
+    folder_depth=len(key_words)
     
-    folders=[c.name for c in db_server.channels]
-    
-    if not folder in folders:
+    if folder_files=="Error":
         return "Error"
     else:
-        folder = discord.utils.get(db_server.channels, name=folder)
-        data=None
-        async for file in folder.history(limit=100):
-            data_list=to_list(file.content)
-            if data_list[0]==key_word:
-                data=data_list[1:len(data_list)]
-                break
-        if data==None:
+        open_folder=[]
+        for file in folder_files:
+            if file[0:folder_depth]==key_words:
+                open_folder.append(file[folder_depth:len(file)])
+                
+        if open_folder==[]:
             return "Error"
         else:
-            return data
+            return open_folder
 
-async def edit_data(folder, key_word, edit_list):
+async def edit_data(folder, key_words, edit_list):
     global db_id
     db_server=client.get_guild(db_id)
     
     folders=[c.name for c in db_server.channels]
+    folder_depth=len(key_words)
     
     if not folder in folders:
         return "Error"
     else:
         folder = discord.utils.get(db_server.channels, name=folder)
-        data=None
+        folder_files=[]
         async for file in folder.history(limit=100):
             data_list=to_list(file.content)
-            if data_list[0]==key_word:
-                data=file
-        if data==None:
+            if data_list[0:folder_depth]==key_words:
+                folder_files.append(file)
+                
+        if folder_files==[]:
             return "Error"
         else:
+            locked_data=to_raw(key_words)
             edit_raw=to_raw(edit_list)
-            await data.edit(content=f"{key_word};{edit_raw}")
+            for data in folder_files:
+                await data.edit(content=f"{locked_data}{edit_raw}")
             
-async def delete_data(folder, key_word):
+async def delete_data(folder, key_words):
     global db_id
     db_server=client.get_guild(db_id)
     
     folders=[c.name for c in db_server.channels]
+    folder_depth=len(key_words)
     
     if not folder in folders:
         return "Error"
     else:
+        
         folder = discord.utils.get(db_server.channels, name=folder)
-        data=None
+        folder_files=[]
         async for file in folder.history(limit=100):
             data_list=to_list(file.content)
-            if data_list[0]==key_word:
-                data=file
-        if data==None:
+            if data_list[0:folder_depth]==key_words:
+                folder_files.append(file)
+                
+        if folder_files==[]:
             return "Error"
         else:
-            await data.delete()
+            for data in folder_files:
+                await data.delete()
             
 async def delete_folder(folder):
     global db_id
@@ -166,13 +198,51 @@ async def get_folder(folder):
         folder = discord.utils.get(db_server.channels, name=folder)
         folder_list=[]
         prev_id=None
-        async for file in folder.message_history(limit=100):
+        async for file in folder.history(limit=100):
             if file.id==prev_id:
                 break
             else:
                 prev_id=file.id
                 folder_list.append(to_list(file.content))
         return folder_list
+
+async def get_raw_folder(folder):
+    global db_id
+    db_server=client.get_guild(db_id)
+    
+    folders=[c.name for c in db_server.channels]
+    
+    if not folder in folders:
+        return "Error"
+    else:
+        folder = discord.utils.get(db_server.channels, name=folder)
+        folder_list=[]
+        prev_id=None
+        async for file in folder.history(limit=100):
+            if file.id==prev_id:
+                break
+            else:
+                prev_id=file.id
+                folder_list.append(file)
+        return folder_list    
+    
+async def get_raw_data(folder, key_words):
+    folder_files=await get_raw_folder(folder)
+    folder_depth=len(key_words)
+    
+    if folder_files=="Error":
+        return "Error"
+    else:
+        open_folder=[]
+        for file in folder_files:
+            file_data=to_list(file.content)
+            if file_data[0:folder_depth]==key_words:
+                open_folder.append(file)
+                
+        if open_folder==[]:
+            return "Error"
+        else:
+            return open_folder
 
 #============Bot async funcs==========
 async def has_helper(user, guild):
@@ -219,12 +289,15 @@ async def glob_pos(user):
     return pos
 
 async def post_log(guild, log_embed):
-    channel_id=await get_data("log-channels", str(guild.id))
-    if not channel_id=="Error":
-        channel_id=int(channel_id[0])
-        channel=discord.utils.get(guild.channels, id=channel_id)
-        if channel in guild.channels:
-            await channel.send(embed=log_embed)
+    log_channels=await get_data("log-channels", [str(guild.id)])
+    if not log_channels=="Error":
+        for channel_id in log_channels:
+            ID=int(channel_id[0])
+            channel=discord.utils.get(guild.channels, id=ID)
+            if channel in guild.channels:
+                await channel.send(embed=log_embed)
+            else:
+                await delete_data("log-channels", [str(guild.id), str(ID)])
     
 async def setup_mute(guild):
     global mute_role_name
@@ -250,6 +323,60 @@ async def detect_member(guild, raw_search):
             status=discord.utils.get(guild.members, id=int(raw_search))
     return status
     
+async def save_time(mode, guild, member, delta):
+    now=datetime.datetime.now()
+    future=now+delta
+    int_fl=all_ints(str(future))
+    future_list=[str(elem) for elem in int_fl]
+    data=[mode, str(guild.id), str(member.id)]
+    data.extend(future_list)
+    await post_data("tasks", data)
+
+async def closest_task():
+    tasks=await get_folder("tasks")
+    future_raw=tasks[0][3:len(tasks[0])]
+    future_raw=[int(elem) for elem in future_raw]
+    future=datetime_from_list(future_raw)
+    now=datetime.datetime.now()
+    min_delta=future-now
+    mode=tasks[0][0]
+    guild=tasks[0][1]
+    member=tasks[0][2]
+    for task in tasks:
+        future_raw=task[3:len(task)]
+        future_raw=[int(elem) for elem in future_raw]
+        future=datetime_from_list(future_raw)
+        now=datetime.datetime.now()
+        delta=future-now
+        if delta<min_delta:
+            min_delta=delta
+            mode=task[0]
+            guild=task[1]
+            member=task[2]
+    return [mode, guild, member, str(min_delta.seconds)]
+    
+async def past_tasks():
+    files=await get_raw_folder("tasks")
+    out=[]
+    for file in files:
+        task=to_list(file.content)
+        future_raw=task[3:len(task)]
+        future_raw=[int(elem) for elem in future_raw]
+        future=datetime_from_list(future_raw)
+        now=datetime.datetime.now()
+        if future<=now:
+            mode=task[0]
+            guild=task[1]
+            member=task[2]
+            out.append([mode, guild, member])
+            await file.delete()
+    return out
+    
+#===========Events=============
+@client.event
+async def on_member_remove(member):
+    await delete_data("warns", [str(member.guild.id), str(member.id)])
+    
 #=============Commands=============
 @client.command()
 async def help(ctx, *, cmd_name=None):
@@ -262,8 +389,12 @@ async def help(ctx, *, cmd_name=None):
                    "6) **'unban [**Участник**]**\n"
                    "7) **'set_log_channel [**ID канала**]** - *настраивает канал для логов*\n"
                    "8) **'remove_log_channel [**ID канала**]** - *отвязывает канал от логов*\n"
-                   "9) **'set_mute_role** - *перенастраивает роль мута в каждом канале*")
-    user_help_list=("1) **'search [**Запрос/ID**]**")
+                   "9) **'set_mute_role** - *перенастраивает роль мута в каждом канале*\n"
+                   "10) **'warn [**Участник**] [**Причина**]**\n"
+                   "11) **'clean_warns [**Участник**]** - *очистить варны участника*\n")
+    user_help_list=("1) **'search [**Запрос/ID**]**\n"
+                    "2) **'warns [**Участник**]** - *варны участника*\n"
+                    "3) **'server_warns** - *все участники с варнами*\n")
     
     help_msg=discord.Embed(
         title="Help menu",
@@ -281,7 +412,7 @@ async def set_log_channel(ctx, channel_id):
         await ctx.send("Канал не найден")
     else:
         channel=discord.utils.get(ctx.guild.channels, id=int(channel_id))
-        await post_data("log-channels", str(ctx.guild.id), [channel_id])
+        await post_data("log-channels", [str(ctx.guild.id), channel_id])
         reply=discord.Embed(
             title="Настройка завершена",
             description=f"Канал для логов успешно настроен как {channel.mention}",
@@ -419,7 +550,14 @@ async def unmute(ctx, raw_user):
                 color=discord.Color.red()
             )
             await ctx.send(embed=reply)
-            if Mute in member.roles:
+            if not Mute in member.roles:
+                log=discord.Embed(
+                    title='Пользователь не заблокирован',
+                    description=f'**{member.mention}** не заблокирован **;black**',
+                    color=discord.Color.darker_grey()
+                )
+                await ctx.send(embed=log)
+            else:
                 if await glob_pos(member)>=await glob_pos(bot_user):
                     reply=discord.Embed(
                         title="⚠Ошибка",
@@ -437,13 +575,6 @@ async def unmute(ctx, raw_user):
                     )
                     await ctx.send(embed=log)
                     await post_log(ctx.guild, log)
-            else:
-                log=discord.Embed(
-                    title='Пользователь не заблокирован',
-                    description=f'**{member.mention}** не заблокирован **;black**',
-                    color=discord.Color.darker_grey()
-                )
-                await ctx.send(embed=log)
                 
 @client.command(aliases=["blacklist"])
 async def black(ctx):
@@ -640,7 +771,7 @@ async def search(ctx, raw_request):
             
             server_name=str(m.nick)
             if server_name=="None":
-                server_name=str(m.name)
+                server_name=m.name
             
             member_simil=word_compare(raw_request, server_name)
             
@@ -661,6 +792,124 @@ async def search(ctx, raw_request):
             color=discord.Color.teal()
         )
         await ctx.send(embed=results)
+    
+@client.command()
+async def warn(ctx, raw_user, *, reason="не указана"):
+    if not await can_ban(ctx.author, ctx.guild):
+        reply=discord.Embed(
+            title="❌Недостаточно прав",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+    else:
+        member=await detect_member(ctx.guild, raw_user)
+        if member=="Error":
+            reply=discord.Embed(
+                title="❌Пользователь не найден",
+                description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
+                color=discord.Color.red()
+                )
+            await ctx.send(embed=reply)
+        else:
+            reason=without_seps(reason)
+            warn_data=[str(ctx.guild.id), str(member.id), str(ctx.author.id), reason]
+            await post_data("warns", warn_data)
+            log=discord.Embed(
+                title="Пользователь предупреждён",
+                description=(f"**Пользователь:** {member.mention}\n"
+                             f"**Причина:** {reason}\n"
+                             f"**Модератор:** {ctx.author.mention}\n"),
+                color=discord.Color.orange()
+            )
+            await ctx.send(embed=log)
+            await post_log(ctx.guild, log)
+            
+@client.command()
+async def warns(ctx, raw_user):
+    member=await detect_member(ctx.guild, raw_user)
+    if member=="Error":
+        reply=discord.Embed(
+            title="❌Пользователь не найден",
+            description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
+            color=discord.Color.red()
+            )
+        await ctx.send(embed=reply)
+    else:
+        user_warns=await get_data("warns", [str(ctx.guild.id), str(member.id)])
+        if user_warns=="Error":
+            warn_embed=discord.Embed(
+                title=f"Предупреждения **{member}**",
+                description="Отсутствуют",
+                color=discord.Color.blurple()
+            )
+            await ctx.send(embed=warn_embed)
+        else:
+            warn_embed=discord.Embed(
+                title=f"Предупреждения **{member}**",
+                color=discord.Color.blurple()
+            )
+            num=0
+            for user_warn in user_warns:
+                num+=1
+                moderator=client.get_user(int(user_warn[0]))
+                reason=user_warn[1]
+                warn_embed.add_field(name=f"**Warn {num}**", value=f"Модератор: {moderator}\nПричина: {reason}", inline=False)
+                if num%25==0 or num==len(user_warns):
+                    await ctx.send(embed=warn_embed)
+                    warn_embed=discord.Embed(
+                        color=discord.Color.blurple()
+                    )
+    
+@client.command()
+async def server_warns(ctx):
+    data=await get_data("warns", [str(ctx.guild.id)])
+    num=0
+    desc=""
+    if data=="Error":
+        desc="Отсутствуют"
+    reply=discord.Embed(
+        title=f"Предупреждения сервера **{ctx.guild}**",
+        description=desc,
+        color=discord.Color.dark_green()
+    )
+    for elem in data:
+        num+=1
+        user_id=int(elem[0])
+        reason=elem[2]
+        user=client.get_user(user_id)
+        reply.add_field(name=user, value=f"Причина: {reason}", inline=False)
+        if num%25==0 or num==len(data):
+            await ctx.send(embed=reply)
+            reply=discord.Embed(
+                color=discord.Color.dark_green()
+            )
+    
+@client.command()
+async def clean_warns(ctx, raw_user):
+    if not await can_ban(ctx.author, ctx.guild):
+        reply=discord.Embed(
+            title="❌Недостаточно прав",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+    else:
+        member=await detect_member(ctx.guild, raw_user)
+        if member=="Error":
+            reply=discord.Embed(
+                title="❌Пользователь не найден",
+                description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
+                color=discord.Color.red()
+                )
+            await ctx.send(embed=reply)
+        else:
+            files=await delete_data("warns", [str(ctx.guild.id), str(member.id)])
+            log=discord.Embed(
+                title="✅ Предупреждения сняты",
+                description=f"Пользователь: {member}\nМодератор: {ctx.author}",
+                color=discord.Color.green()
+            )
+            await ctx.send(embed=log)
+            await post_log(ctx.guild, log)
     
 #=====================Errors==========================
 @mute.error
