@@ -864,25 +864,29 @@ async def warns(ctx, raw_user):
 async def server_warns(ctx):
     data=await get_data("warns", [str(ctx.guild.id)])
     num=0
-    desc=""
     if data=="Error":
-        desc="Отсутствуют"
-    reply=discord.Embed(
-        title=f"Предупреждения сервера **{ctx.guild}**",
-        description=desc,
-        color=discord.Color.dark_green()
-    )
-    for elem in data:
-        num+=1
-        user_id=int(elem[0])
-        reason=elem[2]
-        user=client.get_user(user_id)
-        reply.add_field(name=user, value=f"Причина: {reason}", inline=False)
-        if num%25==0 or num==len(data):
-            await ctx.send(embed=reply)
-            reply=discord.Embed(
-                color=discord.Color.dark_green()
-            )
+        reply=discord.Embed(
+            title=f"Предупреждения сервера **{ctx.guild}**",
+            description="Отсутствуют",
+            color=discord.Color.dark_green()
+        )
+        await ctx.send(embed=reply)
+    else:
+        reply=discord.Embed(
+            title=f"Предупреждения сервера **{ctx.guild}**",
+            color=discord.Color.dark_green()
+        )
+        for elem in data:
+            num+=1
+            user_id=int(elem[0])
+            reason=elem[2]
+            user=client.get_user(user_id)
+            reply.add_field(name=user, value=f"Причина: {reason}", inline=False)
+            if num%25==0 or num==len(data):
+                await ctx.send(embed=reply)
+                reply=discord.Embed(
+                    color=discord.Color.dark_green()
+                )
     
 @client.command()
 async def clean_warns(ctx, raw_user):
