@@ -427,7 +427,7 @@ async def remove_log_channel(ctx, channel_id):
         await ctx.send("Канал не найден")
     else:
         channel=discord.utils.get(ctx.guild.channels, id=int(channel_id))
-        await delete_data("log-channels", str(ctx.guild.id))
+        await delete_data("log-channels", [str(ctx.guild.id), channel_id])
         reply=discord.Embed(
             title="Канал отвязан",
             description=f"Канал для логов успешно отвязан от {channel.mention}",
