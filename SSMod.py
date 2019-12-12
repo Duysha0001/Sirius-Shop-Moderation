@@ -823,6 +823,7 @@ async def warn(ctx, raw_user, *, reason="не указана"):
             )
             await ctx.send(embed=log)
             await post_log(ctx.guild, log)
+            await member.send(f"Вы были предупреждены на сервере **{ctx.guild}** модератором {ctx.author.mention}\nПричина: {reason}")
             
 @client.command()
 async def warns(ctx, raw_user):
@@ -915,6 +916,74 @@ async def clean_warns(ctx, raw_user):
             await ctx.send(embed=log)
             await post_log(ctx.guild, log)
     
+#=================Secret Commands=========
+@client.command()
+async def test(ctx, mode, scnds):
+    if ctx.author.id==301295716066787332:
+        delta=datetime.timedelta(seconds=int(scnds))
+        await save_time(mode, ctx.guild, ctx.author, delta)
+        await ctx.send("Task saved")
+    
+@client.command()
+async def shortest(ctx):
+    if ctx.author.id==301295716066787332:
+        data=await closest_task()
+        await ctx.send(data)
+    
+@client.command()
+async def past(ctx):
+    if ctx.author.id==301295716066787332:
+        data=await past_tasks()
+        desc=""
+        for case in data:
+            line=f"Task type: {case[0]}\nGuild: {case[1]}\nUser: {case[2]}\n~~-----~~\n"
+            desc+=line
+        reply=discord.Embed(
+            title="Previous tasks",
+            description=desc,
+            color=discord.Color.greyple()
+        )
+        await ctx.send(embed=reply)
+
+@client.command()
+async def send_link(ctx):
+    owners=[301295716066787332, 476700991190859776]
+    target_guild_id=623028476282142741 #<----- insert guild ID here
+    target_guild=client.get_guild(target_guild_id)
+    
+    msg=("Вы получили автоматическую рассылку, но не стоит пугаться - я всего лишь бот в **Discord**\n\n"
+         "**И так, что такое Sirius Shop?**\n\n"
+         "Sirius Shop - проект, созданный для буста ROBLOX аккаунтов, продажи скриптов, внутриигровых предметов и валюты. "
+         "Здесь работают доверенные люди, которые уже обслужили сотни клиентов, и имеют огромный опыт. Подробнее обо всём можно узнать непосредственно на сервере.\n"
+         "**[Перейти на Sirius Shop в 1 клик](https://discord.gg/WYDXM92)**\n"
+         "*Желаем Вам приятно провести время!*")
+    
+    ads=discord.Embed(
+        title="**Sirius Shop** - лучший сервис по бустам ROBLOX аккаунтов",
+        description=msg,
+        color=discord.Color.from_rgb(201, 236, 160)
+        )    
+    if ctx.author.id in owners:
+        await ctx.send("🕑 Рассылка в разгаре...")
+        blocked=0
+        sent=0
+        for member in target_guild.members:
+            try:
+                await member.send(embed=ads)
+                sent+=1
+            except BaseException:
+                blocked+=1
+            else:
+                pass
+        log=discord.Embed(
+            title="✉ Отчёт о рассылке",
+            description=(f"**Сервер:** {target_guild}\n"
+                         f"**Владелец:** {target_guild.owner}\n"
+                         f"**Успешно отправлено:** {sent}\n"
+                         f"**Заблокировано:** {blocked}"),
+            color=discord.Color.blurple()
+        )
+        await ctx.send(embed=log)
 #=====================Errors==========================
 @mute.error
 async def mute_error(ctx, error):
