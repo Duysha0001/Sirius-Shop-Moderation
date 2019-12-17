@@ -351,7 +351,7 @@ async def save_task(mode, guild, member, raw_delta):
     future=now+delta
     int_fl=all_ints(str(future))
     future_list=[str(elem) for elem in int_fl]
-    data=["off", mode, str(guild.id), str(member.id)]
+    data=["on", mode, str(guild.id), str(member.id)]
     data.extend(future_list)
     await post_data("tasks", data)
 
@@ -502,7 +502,8 @@ async def help(ctx, *, cmd_name=None):
                    "9) **'remove_log_channel [**ID канала**]** - *отвязывает канал от логов*\n"
                    "10) **'set_mute_role** - *перенастраивает роль мута в каждом канале*\n"
                    "11) **'warn [**Участник**] [**Причина**]**\n"
-                   "12) **'clean_warns [**Участник**]** - *очистить варны участника*\n")
+                   "12) **'clean_warns [**Участник**]** - *очистить варны участника*\n"
+                   "13) **'clean_warn [**Участник**] [**Номер варна**]** - *снять конкретный варн*\n")
     user_help_list=("1) **'search [**Запрос/ID**]**\n"
                     "2) **'warns [**Участник**]** - *варны участника*\n"
                     "3) **'server_warns** - *все участники с варнами*\n")
@@ -1106,6 +1107,53 @@ async def clean_warns(ctx, raw_user):
             await ctx.send(embed=log)
             await post_log(ctx.guild, log)
     
+@client.command()
+async def clean_warn(ctx, raw_user, num):
+    if not await can_ban(ctx.author, ctx.guild):
+        reply=discord.Embed(
+            title="❌Недостаточно прав",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+    else:
+        member=await detect_member(ctx.guild, raw_user)
+        if member=="Error":
+            reply=discord.Embed(
+                title="❌Пользователь не найден",
+                description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
+                color=discord.Color.red()
+                )
+            await ctx.send(embed=reply)
+        else:
+            files=await get_raw_data("warns", [str(ctx.guild.id), str(member.id)])
+            if not number(num):
+                reply=discord.Embed(
+                    title="❌Неверный номер варна",
+                    description=f"Вы ввели **{num}**, но это не целое число",
+                    color=discord.Color.red()
+                )
+                await ctx.send(embed=reply)
+            else:
+                if num<1 or num>len(files):
+                    reply=discord.Embed(
+                        title="❌Неверный номер варна",
+                        description=f"Вы ввели **{num}**, но он слишком большой или меньше 1. Список варнов вызывается командой **'warns [**User**]**",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    raw_warn=files[num-1]
+                    await raw_warn.delete()
+                    reason=to_list(raw_warn.content)[3]
+                    
+                    log=discord.Embed(
+                        title=f"✅ Предупреждение {num} снято",
+                        description=f"Пользователь: {member}\nМодератор: {ctx.author}\nОписание: {reason}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=log)
+                    await post_log(ctx.guild, log)
+    
 #=================Secret Commands=========
 @client.command()
 async def send_link(ctx):
@@ -1209,7 +1257,26 @@ async def remove_log_channel_error(ctx, error):
 async def on_command_error(ctx, error):
     if not isinstance(error, commands.MissingRequiredArgument):
         return
+    
 
+@tempban.error
+async def tempban_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        reply=discord.Embed(
+            title="❌Недостаточно аргументов",
+            description="Формат: **'tempban [**Упомянуть участника/ID**] [**Время**] [**Причина**]**\nНапример:\n**'tempban @Player#0000 5m спам**",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+@clean_warn.error
+async def clean_warn_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        reply=discord.Embed(
+            title="❌Недостаточно аргументов",
+            description="Формат: **'clean_warn [**Упомянуть участника/ID**] [**Номер варна**]**\nНапример:\n**'clean_warn @Player#0000 1**",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
 #===========Tasks=========
 async def task_refresh():
     while True:
@@ -1233,5 +1300,5 @@ async def task_refresh():
     return
     
 client.loop.create_task(task_refresh())
-    
+
 client.run(str(os.environ.get('SIRIUS_TOKEN')))
