@@ -5,7 +5,7 @@ import asyncio
 import datetime
 import os
 
-prefix=".."
+prefix="'"
 client=commands.Bot(command_prefix=prefix)
 bot_id=583016361677160459
 db_id=653160213607612426
