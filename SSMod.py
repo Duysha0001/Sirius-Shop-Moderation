@@ -1134,6 +1134,7 @@ async def clean_warn(ctx, raw_user, num):
                 )
                 await ctx.send(embed=reply)
             else:
+                num=int(num)
                 if num<1 or num>len(files):
                     reply=discord.Embed(
                         title="❌Неверный номер варна",
