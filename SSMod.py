@@ -915,12 +915,12 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
                             await member.ban(reason=reason)
                             log=discord.Embed(
                                 title=f"**{member}** был забанен",
-                                description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}",
+                                description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}\nДлительность: {raw_time} {stamp}",
                                 color=discord.Color.dark_red()
                             )
                             await ctx.send(embed=log)
                             await post_log(ctx.guild, log)
-                            await member.send(f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}")
+                            await member.send(f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}\nДлительность: {raw_time} {stamp}")
                             await asyncio.sleep(time)
                             case=await delete_task("ban", ctx.guild, member)
                             await recharge(case)
