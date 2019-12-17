@@ -5,7 +5,7 @@ import asyncio
 import datetime
 import os
 
-prefix="'"
+prefix=".."
 client=commands.Bot(command_prefix=prefix)
 bot_id=583016361677160459
 db_id=653160213607612426
@@ -58,6 +58,7 @@ def all_ints(word):
     return out
 
 def datetime_from_list(dt_list):
+    dt_list=[int(elem) for elem in dt_list]
     return datetime.datetime(dt_list[0],dt_list[1],dt_list[2],dt_list[3],dt_list[4],dt_list[5])
 
 #=========Ready event============
@@ -109,46 +110,58 @@ async def post_data(folder, data_list):
         await folder.send(data_raw)
     
 async def get_data(folder, key_words):
-    folder_files=await get_folder(folder)
-    folder_depth=len(key_words)
+    global db_id
+    db_server=client.get_guild(db_id)
     
-    if folder_files=="Error":
+    folders=[c.name for c in db_server.channels]
+    
+    if not folder in folders:
         return "Error"
     else:
+        folder = discord.utils.get(db_server.channels, name=folder)
         open_folder=[]
-        for file in folder_files:
-            if file[0:folder_depth]==key_words:
-                open_folder.append(file[folder_depth:len(file)])
+        folder_depth=len(key_words)
+        prev_id=None
+        async for file in folder.history(limit=100):
+            if file.id==prev_id:
+                break
+            else:
+                prev_id=file.id
+                data=to_list(file.content)
+                if data[0:folder_depth]==key_words:
+                    open_folder.append(data[folder_depth:len(data)])
                 
         if open_folder==[]:
             return "Error"
         else:
             return open_folder
 
-async def edit_data(folder, key_words, edit_list):
+async def edit_data(folder_name, key_words, full_edit_list):
     global db_id
     db_server=client.get_guild(db_id)
+    edit_raw=to_raw(full_edit_list)
     
-    folders=[c.name for c in db_server.channels]
+    folder_names=[c.name for c in db_server.channels]
     folder_depth=len(key_words)
     
-    if not folder in folders:
+    if not folder_name in folder_names:
         return "Error"
     else:
-        folder = discord.utils.get(db_server.channels, name=folder)
-        folder_files=[]
+        folder = discord.utils.get(db_server.channels, name=folder_name)
+        exist="Error"
+        prev_id=None
         async for file in folder.history(limit=100):
-            data_list=to_list(file.content)
-            if data_list[0:folder_depth]==key_words:
-                folder_files.append(file)
+            if file.id==prev_id:
+                break
+            else:
+                prev_id=file.id
+                data_list=to_list(file.content)
+                if data_list[0:folder_depth]==key_words:
+                    exist="Success"
+                    await file.edit(content=edit_raw)
                 
-        if folder_files==[]:
+        if exist=="Error":
             return "Error"
-        else:
-            locked_data=to_raw(key_words)
-            edit_raw=to_raw(edit_list)
-            for data in folder_files:
-                await data.edit(content=f"{locked_data}{edit_raw}")
             
 async def delete_data(folder, key_words):
     global db_id
@@ -227,17 +240,26 @@ async def get_raw_folder(folder):
         return folder_list    
     
 async def get_raw_data(folder, key_words):
-    folder_files=await get_raw_folder(folder)
-    folder_depth=len(key_words)
+    global db_id
+    db_server=client.get_guild(db_id)
     
-    if folder_files=="Error":
+    folders=[c.name for c in db_server.channels]
+    
+    if not folder in folders:
         return "Error"
     else:
+        folder = discord.utils.get(db_server.channels, name=folder)
         open_folder=[]
-        for file in folder_files:
-            file_data=to_list(file.content)
-            if file_data[0:folder_depth]==key_words:
-                open_folder.append(file)
+        folder_depth=len(key_words)
+        prev_id=None
+        async for file in folder.history(limit=100):
+            if file.id==prev_id:
+                break
+            else:
+                prev_id=file.id
+                data=to_list(file.content)
+                if data[0:folder_depth]==key_words:
+                    open_folder.append(file)
                 
         if open_folder==[]:
             return "Error"
@@ -323,54 +345,142 @@ async def detect_member(guild, raw_search):
             status=discord.utils.get(guild.members, id=int(raw_search))
     return status
     
-async def save_time(mode, guild, member, delta):
+async def save_task(mode, guild, member, raw_delta):
+    delta=datetime.timedelta(seconds=raw_delta)
     now=datetime.datetime.now()
     future=now+delta
     int_fl=all_ints(str(future))
     future_list=[str(elem) for elem in int_fl]
-    data=[mode, str(guild.id), str(member.id)]
+    data=["off", mode, str(guild.id), str(member.id)]
     data.extend(future_list)
     await post_data("tasks", data)
 
-async def closest_task():
-    tasks=await get_folder("tasks")
-    future_raw=tasks[0][3:len(tasks[0])]
-    future_raw=[int(elem) for elem in future_raw]
-    future=datetime_from_list(future_raw)
-    now=datetime.datetime.now()
-    min_delta=future-now
-    mode=tasks[0][0]
-    guild=tasks[0][1]
-    member=tasks[0][2]
-    for task in tasks:
-        future_raw=task[3:len(task)]
-        future_raw=[int(elem) for elem in future_raw]
+async def closest_inactive_task():
+    raw_tasks=await get_raw_data("tasks", ["off"])
+    
+    if raw_tasks=="Error":
+        return "Error"
+    else:
+        task_file=raw_tasks[0]
+        
+        first_task=to_list(task_file.content)
+        last=len(first_task)
+        
+        future_raw_str=first_task[last-6:last]
+        future_raw=[int(elem) for elem in future_raw_str]
+        
         future=datetime_from_list(future_raw)
         now=datetime.datetime.now()
-        delta=future-now
-        if delta<min_delta:
-            min_delta=delta
-            mode=task[0]
-            guild=task[1]
-            member=task[2]
-    return [mode, guild, member, str(min_delta.seconds)]
-    
-async def past_tasks():
+        min_delta=future-now
+        
+        for file in raw_tasks:
+            task=to_list(file.content)
+            
+            future_raw_str=task[last-6:last]
+            future_raw=[int(elem) for elem in future_raw_str]
+            future=datetime_from_list(future_raw)
+            delta=future-now
+            
+            if delta<min_delta and future>now:
+                min_delta=delta
+                task_file=file
+        
+        task=to_list(task_file.content)
+        task[0]="on"
+        task_edit=to_raw(task)
+        await task_file.edit(content=task_edit)
+        return [task[1:4], min_delta.seconds]
+
+async def clean_past_tasks():
     files=await get_raw_folder("tasks")
     out=[]
     for file in files:
         task=to_list(file.content)
-        future_raw=task[3:len(task)]
-        future_raw=[int(elem) for elem in future_raw]
+        last=len(task)
+        future_raw=task[last-6: last]
+        
         future=datetime_from_list(future_raw)
         now=datetime.datetime.now()
         if future<=now:
-            mode=task[0]
-            guild=task[1]
-            member=task[2]
+            mode=task[1]
+            guild=task[2]
+            member=task[3]
             out.append([mode, guild, member])
             await file.delete()
     return out
+    
+async def reset_tasks():
+    active_tasks=await get_raw_data("tasks", ["on"])
+    if active_tasks!="Error":
+        for task in active_tasks:
+            task_data=to_list(task.content)
+            task_data[0]="off"
+            task_edit=to_raw(task_data)
+            await task.edit(content=task_edit)
+    
+async def delete_task(mode, guild, member):
+    global db_id
+    db_server=client.get_guild(db_id)
+    
+    folders=[c.name for c in db_server.channels]
+    if not "tasks" in folders:
+        return "Error"
+    else:
+        out="Error"
+        folder = discord.utils.get(db_server.channels, name="tasks")
+        open_folder=[]
+        key_words=[mode, str(guild.id), str(member.id)]
+        prev_id=None
+        
+        async for file in folder.history(limit=100):
+            if file.id==prev_id:
+                break
+            else:
+                prev_id=file.id
+                data=to_list(file.content)
+                if data[1:4]==key_words:
+                    out=[data[1], data[2], data[3]]
+                    await file.delete()
+                
+        return out   
+    
+async def recharge(case):
+    global bot_id
+    global mute_role_name
+    mode=case[0]
+    guild_id=int(case[1])
+    member_id=int(case[2])
+    guild=client.get_guild(guild_id)
+    member=discord.utils.get(guild.members, id=member_id)
+    bot_user=discord.utils.get(guild.members, id=bot_id)
+    if mode=="mute":
+        Mute = discord.utils.get(guild.roles, name=mute_role_name)
+        if not Mute in guild.roles:
+            await setup_mute(guild)
+            Mute = discord.utils.get(guild.roles, name=mute_role_name)
+        await member.remove_roles(Mute)
+        await delete_task("mute", guild, member)
+        log=discord.Embed(
+            title=':key: Пользователь разблокирован',
+            description=f'**{member.mention}** был разблокирован',
+            color=discord.Color.darker_grey()
+        )
+        await post_log(guild, log)
+    elif mode=="ban":
+        unbanned=None
+        banned_users=await guild.bans()
+        for ban_entry in banned_users:
+            user=ban_entry.user
+            if user.id==member_id:
+                unbanned=user
+        if unbanned!=None:
+            await guild.unban(unbanned)        
+            log=discord.Embed(
+                title=f"**{unbanned}** был разбанен",
+                color=discord.Color.dark_green()
+            )
+            await post_log(guild, log)
+            await unbanned.send(f"Вы были разбанены на сервере **{guild.name}**")
     
 #===========Events=============
 @client.event
@@ -463,13 +573,14 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
             )
             await ctx.send(embed=reply)
         else:
-            AbrList=['s','m','h']
-            DurList=[1,60,3600]
-            Names=['сек.','мин.','ч.']
+            AbrList=['s','m','h','d']
+            DurList=[1,60,3600,3600*24]
+            Names=['сек.','мин.','ч.','сут.']
+            
             if not raw_time[len(raw_time)-1] in AbrList:
                 reply=discord.Embed(
                     title="❌Неверный формат",
-                    description="Укажите время так: **[Число]m**\n\n**s** - секунды, **m** - минуты, **h** - часы",
+                    description="Укажите время так: **[Число]m**\n\n**s** - секунды, **m** - минуты, **h** - часы, **d** - дни",
                     color=discord.Color.red()
                 )
                 await ctx.send(embed=reply)
@@ -487,8 +598,8 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                     await ctx.send(embed=reply)
                 else:
                     time=int(raw_time)*dur
-                    if time>86400:
-                        await ctx.send("Мут не может быть осуществлён больше, чем на 24 часа")
+                    if time>86400*7:
+                        await ctx.send("Мут не может быть осуществлён больше, чем на неделю")
                     else:
                         if await glob_pos(member)>=await glob_pos(bot_user):
                             reply=discord.Embed(
@@ -500,6 +611,8 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                             await ctx.send(embed=reply)
                         else:
                             await member.add_roles(Mute)
+                            await save_task("mute", ctx.guild, member, time)
+                            
                             log=discord.Embed(
                                 title=':lock: Пользователь заблокирован',
                                 description=(f"**{member.mention}** был заблокирован на **{raw_time}** {stamp}\n"
@@ -550,6 +663,7 @@ async def unmute(ctx, raw_user):
                 color=discord.Color.red()
             )
             await ctx.send(embed=reply)
+        else:
             if not Mute in member.roles:
                 log=discord.Embed(
                     title='Пользователь не заблокирован',
@@ -568,6 +682,7 @@ async def unmute(ctx, raw_user):
                     await ctx.send(embed=reply)
                 else:
                     await member.remove_roles(Mute)
+                    await delete_task("mute", ctx.guild, member)
                     log=discord.Embed(
                         title=':key: Пользователь разблокирован',
                         description=f'**{member.mention}** был разблокирован',
@@ -735,6 +850,80 @@ async def unban(ctx, *, member=None):
                 await post_log(ctx.guild, log)
                 await unbanned.send(f"Вы были разбанены на сервере **{ctx.guild.name}**")
 
+@client.command()
+async def tempban(ctx, raw_user, raw_time, *, reason=""):
+    global bot_id
+    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
+    
+    member=await detect_member(ctx.guild, raw_user)
+    if member=="Error":
+        reply=discord.Embed(
+            title="❌Пользователь не найден",
+            description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
+            color=discord.Color.red()
+            )
+        await ctx.send(embed=reply)
+        
+    else:  
+        if not await can_ban(ctx.author, ctx.guild):
+            reply=discord.Embed(
+                title="❌Недостаточно прав",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=reply)
+        else:
+            AbrList=['s','m','h','d','w']
+            DurList=[1,60,3600,86400,604800]
+            Names=['сек.','мин.','ч.','сут.','нед.']
+            
+            if not raw_time[len(raw_time)-1] in AbrList:
+                reply=discord.Embed(
+                    title="❌Неверный формат",
+                    description="Укажите время так: **[Число]m**\n\n**s** - секунды, **m** - минуты, **h** - часы, **d** - дни",
+                    color=discord.Color.red()
+                )
+                await ctx.send(embed=reply)
+            else:
+                index=AbrList.index(raw_time[len(raw_time)-1])
+                dur=DurList[index]
+                raw_time=raw_time[0:len(raw_time)-1]
+                stamp=Names[index]
+                if not number(raw_time):
+                    reply=discord.Embed(
+                        title="❌Неверный формат",
+                        description=f"[{raw_time}] должно быть целым числом",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    time=int(raw_time)*dur
+                    if time>604800*7:
+                        await ctx.send("Бан не может быть осуществлён больше, чем на 7 недель")
+                    else:
+                        if await glob_pos(member)>=await glob_pos(bot_user):
+                            reply=discord.Embed(
+                                title="⚠Ошибка",
+                                description=(f"Моя роль не выше роли пользователя {member}\n"
+                                             "Чтобы исправить это, перетащите какую-либо из моих ролей выше"),
+                                color=discord.Color.gold()
+                            )
+                            await ctx.send(embed=reply)
+                        else:
+                            await save_task("ban", ctx.guild, member, time)
+                            
+                            await member.ban(reason=reason)
+                            log=discord.Embed(
+                                title=f"**{member}** был забанен",
+                                description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}",
+                                color=discord.Color.dark_red()
+                            )
+                            await ctx.send(embed=log)
+                            await post_log(ctx.guild, log)
+                            await member.send(f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}")
+                            await asyncio.sleep(time)
+                            case=await delete_task("ban", ctx.guild, member)
+                            await recharge(case)
+    
 @client.command()
 async def set_mute_role(ctx):
     await ctx.send("🕑 пожалуйста, подождите...")
@@ -918,34 +1107,6 @@ async def clean_warns(ctx, raw_user):
     
 #=================Secret Commands=========
 @client.command()
-async def test(ctx, mode, scnds):
-    if ctx.author.id==301295716066787332:
-        delta=datetime.timedelta(seconds=int(scnds))
-        await save_time(mode, ctx.guild, ctx.author, delta)
-        await ctx.send("Task saved")
-    
-@client.command()
-async def shortest(ctx):
-    if ctx.author.id==301295716066787332:
-        data=await closest_task()
-        await ctx.send(data)
-    
-@client.command()
-async def past(ctx):
-    if ctx.author.id==301295716066787332:
-        data=await past_tasks()
-        desc=""
-        for case in data:
-            line=f"Task type: {case[0]}\nGuild: {case[1]}\nUser: {case[2]}\n~~-----~~\n"
-            desc+=line
-        reply=discord.Embed(
-            title="Previous tasks",
-            description=desc,
-            color=discord.Color.greyple()
-        )
-        await ctx.send(embed=reply)
-
-@client.command()
 async def send_link(ctx):
     owners=[301295716066787332, 476700991190859776]
     target_guild_id=623028476282142741 #<----- insert guild ID here
@@ -1047,5 +1208,29 @@ async def remove_log_channel_error(ctx, error):
 async def on_command_error(ctx, error):
     if not isinstance(error, commands.MissingRequiredArgument):
         return
+
+#===========Tasks=========
+async def task_refresh():
+    while True:
+        await client.wait_until_ready()
+        cases=await clean_past_tasks()
+        for case in cases:
+            await recharge(case)
+        await reset_tasks()
+        data=await closest_inactive_task()
+        
+        if data!="Error":
+            delay=data[1]
+            case=data[0]
+            await asyncio.sleep(delay)
+            guild=client.get_guild(int(case[1]))
+            member=discord.utils.get(guild.members, id=int(case[2]))
+            case=await delete_task(case[0], guild, member)
+            await recharge(case)
+        else:
+            break
+    return
+    
+client.loop.create_task(task_refresh())
     
 client.run(str(os.environ.get('SIRIUS_TOKEN')))
