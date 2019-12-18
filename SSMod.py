@@ -336,13 +336,9 @@ async def setup_mute(guild):
 async def detect_member(guild, raw_search):
     status="Error"
     for m in guild.members:
-        if raw_search==m.mention:
+        if raw_search==m.mention or raw_search==f"<@!{m.id}>" or raw_search==str(m.id):
             status=m
             break
-    if status=="Error":
-        members=[str(m.id) for m in guild.members]
-        if raw_search in members:
-            status=discord.utils.get(guild.members, id=int(raw_search))
     return status
     
 async def save_task(mode, guild, member, raw_delta):
@@ -442,7 +438,7 @@ async def delete_task(mode, guild, member):
                     out=[data[1], data[2], data[3]]
                     await file.delete()
                 
-        return out   
+        return out
     
 async def recharge(case):
     global bot_id
@@ -476,7 +472,7 @@ async def recharge(case):
         if unbanned!=None:
             await guild.unban(unbanned)        
             log=discord.Embed(
-                title=f"**{unbanned}** был разбанен",
+                title=f"**{member.name}#{member.discriminator}** был разбанен",
                 color=discord.Color.dark_green()
             )
             await post_log(guild, log)
@@ -484,8 +480,33 @@ async def recharge(case):
     
 #===========Events=============
 @client.event
-async def on_member_remove(member):
-    await delete_data("warns", [str(member.guild.id), str(member.id)])
+async def on_member_join(member):
+    global db_id
+    global mute_role_name
+    db_server=client.get_guild(db_id)
+    
+    folders=[c.name for c in db_server.channels]
+    if "tasks" in folders:
+        folder = discord.utils.get(db_server.channels, name="tasks")
+        key_words=["mute", str(member.guild.id), str(member.id)]
+        prev_id=None
+        
+        async for file in folder.history(limit=100):
+            if file.id==prev_id:
+                break
+            else:
+                prev_id=file.id
+                data=to_list(file.content)
+                if data[1:4]==key_words:
+                    if not Mute in member.guild.roles:
+                        await setup_mute(member.guild)
+                        Mute = discord.utils.get(member.guild.roles, name=mute_role_name)
+                    await member.add_roles(Mute)
+                    
+    
+#@client.event
+#async def on_member_remove(member):
+    #await delete_data("warns", [str(member.guild.id), str(member.id)])
     
 #=============Commands=============
 @client.command()
@@ -628,6 +649,8 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                             await asyncio.sleep(time)
                             if Mute in member.roles:
                                 await member.remove_roles(Mute)
+                                case=await delete_task("mute", ctx.guild, member)
+                                await recharge(case)                                
                                 log=discord.Embed(
                                     title=':key: Пользователь разблокирован',
                                     description=(f"**{member.mention}** был разблокирован\n"
@@ -1254,11 +1277,6 @@ async def remove_log_channel_error(ctx, error):
             color=discord.Color.red()
         )
         await ctx.send(embed=Miss)
-@client.event
-async def on_command_error(ctx, error):
-    if not isinstance(error, commands.MissingRequiredArgument):
-        return
-    
 
 @tempban.error
 async def tempban_error(ctx, error):
@@ -1301,5 +1319,10 @@ async def task_refresh():
     return
     
 client.loop.create_task(task_refresh())
+
+@client.event
+async def on_command_error(ctx, error):
+    if not isinstance(error, commands.MissingRequiredArgument):
+        return
 
 client.run(str(os.environ.get('SIRIUS_TOKEN')))
