@@ -498,9 +498,10 @@ async def on_member_join(member):
                 prev_id=file.id
                 data=to_list(file.content)
                 if data[1:4]==key_words:
+                    Mute = discord.utils.get(member.guild.roles, name=mute_role_name)
                     if not Mute in member.guild.roles:
                         await setup_mute(member.guild)
-                    Mute = discord.utils.get(member.guild.roles, name=mute_role_name)
+                        Mute = discord.utils.get(member.guild.roles, name=mute_role_name)
                     await member.add_roles(Mute)
                     break
     
