@@ -500,9 +500,9 @@ async def on_member_join(member):
                 if data[1:4]==key_words:
                     if not Mute in member.guild.roles:
                         await setup_mute(member.guild)
-                        Mute = discord.utils.get(member.guild.roles, name=mute_role_name)
+                    Mute = discord.utils.get(member.guild.roles, name=mute_role_name)
                     await member.add_roles(Mute)
-                    
+                    break
     
 #@client.event
 #async def on_member_remove(member):
