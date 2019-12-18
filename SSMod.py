@@ -454,14 +454,9 @@ async def recharge(case):
         if not Mute in guild.roles:
             await setup_mute(guild)
             Mute = discord.utils.get(guild.roles, name=mute_role_name)
-        await member.remove_roles(Mute)
-        await delete_task("mute", guild, member)
-        log=discord.Embed(
-            title=':key: Пользователь разблокирован',
-            description=f'**{member.mention}** был разблокирован',
-            color=discord.Color.darker_grey()
-        )
-        await post_log(guild, log)
+        if await glob_pos(bot_user)>await glob_pos(member):
+            await member.remove_roles(Mute)
+        
     elif mode=="ban":
         unbanned=None
         banned_users=await guild.bans()
@@ -470,13 +465,7 @@ async def recharge(case):
             if user.id==member_id:
                 unbanned=user
         if unbanned!=None:
-            await guild.unban(unbanned)        
-            log=discord.Embed(
-                title=f"**{member.name}#{member.discriminator}** был разбанен",
-                color=discord.Color.dark_green()
-            )
-            await post_log(guild, log)
-            await unbanned.send(f"Вы были разбанены на сервере **{guild.name}**")
+            await guild.unban(unbanned)
     
 #===========Events=============
 @client.event
@@ -1304,6 +1293,20 @@ async def task_refresh():
         cases=await clean_past_tasks()
         for case in cases:
             await recharge(case)
+            if case[0]=="mute":
+                log=discord.Embed(
+                    title=':key: Пользователь разблокирован',
+                    description=f'**{member.mention}** был разблокирован',
+                    color=discord.Color.darker_grey()
+                )
+                await post_log(guild, log)
+            elif case[0]=="ban":
+                log=discord.Embed(
+                    title=f"**{member.name}#{member.discriminator}** был разбанен",
+                    color=discord.Color.dark_green()
+                )
+                await post_log(guild, log)
+                await member.send(f"Вы были разбанены на сервере **{guild.name}**")
         await reset_tasks()
         data=await closest_inactive_task()
         
@@ -1315,6 +1318,20 @@ async def task_refresh():
             member=discord.utils.get(guild.members, id=int(case[2]))
             case=await delete_task(case[0], guild, member)
             await recharge(case)
+            if case[0]=="mute":
+                log=discord.Embed(
+                    title=':key: Пользователь разблокирован',
+                    description=f'**{member.mention}** был разблокирован',
+                    color=discord.Color.darker_grey()
+                )
+                await post_log(guild, log)
+            elif case[0]=="ban":
+                log=discord.Embed(
+                    title=f"**{member.name}#{member.discriminator}** был разбанен",
+                    color=discord.Color.dark_green()
+                )
+                await post_log(guild, log)
+                await member.send(f"Вы были разбанены на сервере **{guild.name}**")
         else:
             break
     return
