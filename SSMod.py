@@ -576,7 +576,7 @@ async def help(ctx, *, cmd_name=None):
              "> `##Цвет из списка##` - *подкрашивает рамку цветом из списка*\n"
              "**Список цветов:** `[red, blue, green, gold, teal, magenta]`\n"
              "**Все эти опции не обязательны, можно отправить хоть пустую рамку**\n"
-             f"**Пример:** {p}embed ==Server update!==\n=Added **Moderator** role!\n")
+             f"**Пример:** {p}embed\n==Server update!==\n=Added **Moderator** role!=\n")
                        ]
         
         if not cmd_name in command_names:
