@@ -27,30 +27,8 @@ async def on_ready():
 #===========Events=============
 @client.event
 async def on_member_join(member):
-    global db_id
-    global mute_role_name
-    db_server=client.get_guild(db_id)
-    
-    folders=[c.name for c in db_server.channels]
-    if "tasks" in folders:
-        folder = discord.utils.get(db_server.channels, name="tasks")
-        key_words=["mute", str(member.guild.id), str(member.id)]
-        prev_id=None
-        
-        Mute = discord.utils.get(member.guild.roles, name=mute_role_name)
-        if not Mute in member.guild.roles:
-            await setup_mute(member.guild)
-            Mute = discord.utils.get(member.guild.roles, name=mute_role_name)        
-        
-        async for file in folder.history(limit=100):
-            if file.id==prev_id:
-                break
-            else:
-                prev_id=file.id
-                data=to_list(file.content)
-                if data[1:4]==key_words:
-                    await member.add_roles(Mute)
-                    break
+    await refresh_mute(member)
+    await send_welcome(member)
     
 #@client.event
 #async def on_member_remove(member):
@@ -98,6 +76,8 @@ def all_ints(word):
             number=""
         else:
             number+=letter
+    if number!="":
+        out.append(number)
     return out
 
 def datetime_from_list(dt_list):
@@ -127,6 +107,23 @@ def list_sum(List):
         out+="\n"+str(elem)
     return out[1:len(out)]
 
+def detect_args(text, lll):
+    wid=len(lll)
+    iso=False
+    out=[]
+    for i in range(len(text)-wid+1):
+        piece=text[i:i+wid]
+        if piece==lll:
+            if iso==True:
+                iso=False
+                end=i+wid
+                if start<end:
+                    out.append([text[start+wid:end-wid], start, end])
+            else:
+                iso=True
+                start=i
+    return out    
+    
 #========Database Minor tools=======
 def to_raw(data_list):
     out=""
@@ -391,7 +388,7 @@ async def setup_mute(guild):
 async def detect_member(guild, raw_search):
     status="Error"
     for m in guild.members:
-        if raw_search==m.mention or raw_search==f"<@!{m.id}>" or raw_search==str(m.id):
+        if raw_search==m.mention or raw_search==f"<@!{m.id}>" or raw_search==str(m.id) or raw_search==f"<@{m.id}>":
             status=m
             break
     return status
@@ -530,6 +527,64 @@ async def polite_send(user, msg):
     else:
         pass    
     
+async def refresh_mute(member):
+    global db_id
+    global mute_role_name
+    db_server=client.get_guild(db_id)
+    
+    folders=[c.name for c in db_server.channels]
+    if "tasks" in folders:
+        folder = discord.utils.get(db_server.channels, name="tasks")
+        key_words=["mute", str(member.guild.id), str(member.id)]
+        prev_id=None
+        
+        Mute = discord.utils.get(member.guild.roles, name=mute_role_name)
+        if not Mute in member.guild.roles:
+            await setup_mute(member.guild)
+            Mute = discord.utils.get(member.guild.roles, name=mute_role_name)        
+        
+        async for file in folder.history(limit=100):
+            if file.id==prev_id:
+                break
+            else:
+                prev_id=file.id
+                data=to_list(file.content)
+                if data[1:4]==key_words:
+                    await member.add_roles(Mute)
+                    break
+
+async def send_welcome(member):
+    global bot_id
+    bot_user=discord.utils.get(member.guild.members, id=bot_id)
+    
+    channels=await get_data("welcome-channels", [str(member.guild.id)])
+    if channels!="Error":
+        ID=int(channels[0][0])
+        channel=discord.utils.get(member.guild.channels, id=ID)
+        messages=await get_data("welcome-msg", [str(member.guild.id)])
+        if messages!="Error":
+            arg_names=["server", "user"]
+            arg_values=[member.guild, member.mention]
+            message=messages[0][0]
+            arg_data=detect_args(message, "==")
+            text=""
+            prev_end=0
+            for triplet in arg_data:
+                if triplet[0].lower() in arg_names:
+                    ind=arg_names.index(triplet[0].lower())
+                    start=triplet[1]
+                    end=triplet[2]
+                    text+=f"{message[prev_end:start]}{arg_values[ind]}"
+                    prev_end=end
+            text+=f"{message[prev_end:len(message)]}"
+            await polite_send(channel, text)
+    roles=await get_data("welcome-roles", [str(member.guild.id)])
+    if roles!="Error":
+        for str_ID in roles[0]:
+            role=discord.utils.get(member.guild.roles, id=int(str_ID))
+            if role!=None and role.position<await glob_pos(bot_user):
+                await member.add_roles(role)
+    
 #=============Commands=============
 @client.command()
 async def help(ctx, *, cmd_name=None):
@@ -565,7 +620,7 @@ async def help(ctx, *, cmd_name=None):
         await ctx.send(embed=help_msg)
     else:
         cmd_name=cmd_name.lower()
-        command_names=["embed"]
+        command_names=["embed", "set_welcome"]
         command_descs=[
             ("**Описание:** позволяет отправить сообщение в рамке, имеет ряд настроек кастомизации такого сообщения.\n"
              "**Применение:**\n"
@@ -576,7 +631,23 @@ async def help(ctx, *, cmd_name=None):
              "> `##Цвет из списка##` - *подкрашивает рамку цветом из списка*\n"
              "**Список цветов:** `[red, blue, green, gold, teal, magenta]`\n"
              "**Все эти опции не обязательны, можно отправить хоть пустую рамку**\n"
-             f"**Пример:** {p}embed\n==Server update!==\n=Added **Moderator** role!=\n")
+             f"**Пример:** {p}embed\n==Server update!==\n=Added **Moderator** role!=\n"),
+            ("**Описание:** позволяет настроить приветственные действия с только что присоединившимся участником, имеет 3 раздела настроек\n"
+             f"**Применение:** **{p}set_welcome [**раздел**] [**аргументы / delete**]**\n"
+             "**Разделы:** `message, channel, roles`\n"
+             "Раздел `message`:\n"
+             "> Этот раздел требует ввести сообщение, которым будет приветствоваться каждый прибывший на сервер\n"
+             "> Чтобы в сообщении упоминался прибывший, напишите `==user==` в том месте, где он должен быть упомянут\n"
+             "> Чтобы отображалось название сервера, напишите `==server==` в нужном Вам месте\n"
+             f"*Пример: {p}set_welcome message Добро пожаловать на сервер ==server==, ==user==!*\n"
+             "Раздел `channel`:\n"
+             "> Этот раздел требует ID канала для приветствий\n"
+             f"*Пример: {p}set_welcome channel {ctx.channel.id}*\n"
+             "Раздел `roles`\n"
+             "> Этот раздел требует список ID ролей, которые будут выдаваться каждому участнику при входе\n"
+             "> Для удаления конкретных ролей из уже настроенных таким образом, напишите `delete` вместо списка ID\n"
+             f"*Пример: {p}set_welcome roles {'123'*6}*\n\n"
+             f"**Как удалить уже настроенные действия?**\n**{p}set_welcome [**Раздел**] delete**\n")
                        ]
         
         if not cmd_name in command_names:
@@ -1310,6 +1381,204 @@ async def embed(ctx, *, raw_text):
     await ctx.message.delete()
     await ctx.send(embed=msg)
 
+@client.command()
+async def set_welcome(ctx, categ, *, text="None"):
+    global prefix
+    global bot_id
+    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
+    
+    if not await has_admin(ctx.author, ctx.guild):
+        reply=discord.Embed(
+            title="❌Ошибка",
+            description="Недостаточно прав",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+        
+    else:
+        #==========================Message========================
+        if categ.lower()=="message":
+            messages=await get_data("welcome-msg", [str(ctx.guild.id)])
+            if text.lower()=="delete":
+                if messages=="Error":
+                    reply=discord.Embed(
+                        title="❌Ошибка",
+                        description=f"Приветственное сообщение не настроено",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    await delete_data("welcome-msg", [str(ctx.guild.id)])
+                    reply=discord.Embed(
+                        title="✅Приветственное сообщение удалено",
+                        description=f"**Бывшее сообщение:** {messages[0][0]}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=reply)
+            
+            else:
+                if messages!="Error":
+                    reply=discord.Embed(
+                        title="❌Ошибка",
+                        description=f"Приветственное сообщение уже есть:\n{messages[0][0]}",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    if text==None:
+                        text="Здравствуй, ==user==, добро пожаловать в ==server==!"
+                    text=without_seps(text)
+                    await post_data("welcome-msg", [str(ctx.guild.id), text])
+                    reply=discord.Embed(
+                        title="✅ Сообщение успешно настроено",
+                        description=f"**Текст:** {text}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=reply)
+        #========================Channel========================
+        elif categ.lower()=="channel":
+            channels=await get_data("welcome-channels", [str(ctx.guild.id)])
+            if channels!="Error":
+                reply=discord.Embed(
+                    title="❌Ошибка",
+                    description=f"Канал для приветствий уже есть:\n{channels[0][0]}",
+                    color=discord.Color.red()
+                )
+                await ctx.send(embed=reply)
+            else:
+                if text.lower()=="delete":
+                    data=await get_raw_data("welcome-channels", [str(ctx.guild.id)])
+                    if data=="Error":
+                        reply=discord.Embed(
+                            title="❌Ошибка",
+                            description=f"Канал для приветствий не настроен",
+                            color=discord.Color.red()
+                        )
+                        await ctx.send(embed=reply)
+                    else:
+                        await data[0].delete()
+                        data_list=to_list(data[0].content)
+                        channel=discord.utils.get(ctx.guild.channels, id=int(data_list[1]))
+                        reply=discord.Embed(
+                            title="✅Канал отвязан",
+                            description=f"Приветствия больше не присылаются в канал {channel.mention}",
+                            color=discord.Color.green()
+                        )
+                        await ctx.send(embed=reply)
+                    
+                elif not number(text):
+                    reply=discord.Embed(
+                        title="❌Ошибка",
+                        description=(f"Пожалуйста, укажите ID канала\nНапример: **{prefix}set_welcome channel {ctx.channel.id}**\n"
+                                     "Или напишите `delete`, чтобы удалить существующий"),
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    channel=discord.utils.get(ctx.guild.channels, id=int(text))
+                    if channel==None:
+                        reply=discord.Embed(
+                            title="❌Ошибка",
+                            description=f"Вы указали **{text}** в качестве ID канала, но канала с таким ID не существует",
+                            color=discord.Color.red()
+                        )
+                        await ctx.send(embed=reply)
+                    else:
+                        await post_data("welcome-channels", [str(ctx.guild.id), text])
+                        reply=discord.Embed(
+                            title="✅ Канал успешно настроен",
+                            description=f"Канал приветствий: {channel.mention}",
+                            color=discord.Color.green()
+                        )
+                        await ctx.send(embed=reply)
+        #===================Roles======================
+        elif categ.lower()=="roles":
+            
+            roles=await get_data("welcome-roles", [str(ctx.guild.id)])
+            if text.lower().startswith("delete"):
+                if roles=="Error":
+                    reply=discord.Embed(
+                        title="❌Ошибка",
+                        description=f"Нет настроенных ролей",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    IDs=all_ints(text)
+                    if IDs==[]:
+                        await delete_data("welcome-roles", [str(ctx.guild.id)])
+                        reply=discord.Embed(
+                            title="✅ Роли не будут выдаваться",
+                            description=f"Больше не будут выдаваться роли при приветствии",
+                            color=discord.Color.green()
+                        )
+                        await ctx.send(embed=reply)
+                    else:
+                        deleted=[]
+                        names=[]
+                        for ID in IDs:
+                            if str(ID) in roles[0] and not ID in deleted:
+                                deleted.append(ID)
+                                names.append(discord.utils.get(ctx.guild.roles, id=ID))
+                                await delete_data("welcome-roles", [str(ctx.guild.id), str(ID)])
+                        head="✅ Убраны роли из списка выдаваемых"
+                        if deleted==[]:
+                            head="❌Ошибка"
+                        reply=discord.Embed(
+                            title=head,
+                            description=list_sum(names),
+                            color=discord.Color.green()
+                        )
+                        await ctx.send(embed=reply)
+            else:
+                if roles!="Error":
+                    new_roles_id=roles[0]
+                    new_roles=[discord.utils.get(ctx.guild.roles, id=int(elem)) for elem in new_roles_id]
+                else:
+                    roles=[]
+                    new_roles=[]
+                    new_roles_id=[]
+                
+                cant_add=[]
+                IDs=all_ints(text)
+                for ID in IDs:
+                    role=discord.utils.get(ctx.guild.roles, id=ID)
+                    if not role in new_roles and role!=None:
+                        new_roles.append(role)
+                        new_roles_id.append(str(ID))
+                        if role.position>=await glob_pos(bot_user):
+                            if cant_add==[]:
+                                cant_add.append("**Роли, которые я не в праве добавлять:**")
+                            cant_add.append(f"> {role.name}; **ID:** {role.id}")
+                if len(new_roles)==len(roles):
+                    reply=discord.Embed(
+                        title="❌Ошибка",
+                        description="Не распознано ни одного ID роли из указанных Вами ID",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    new_data=[str(ctx.guild.id)]
+                    new_data.extend(new_roles_id)
+                    if roles==[]:
+                        await post_data("welcome-roles", new_data)
+                    else:
+                        await edit_data("welcome-roles", [str(ctx.guild.id)], new_data)
+                    reply=discord.Embed(
+                        title="✅ Добавлены новые стартовые роли",
+                        description=f"**Даются при входе:**\n{list_sum(new_roles)}\n{list_sum(cant_add)}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=reply)
+            
+        else:
+            reply=discord.Embed(
+                title="❌Ошибка",
+                description="Такой настройки нет",
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=reply)
+
 #=================Secret Commands=========
 @client.command()
 async def send_link(ctx):
@@ -1433,6 +1702,17 @@ async def clean_warn_error(ctx, error):
         reply=discord.Embed(
             title="❌Недостаточно аргументов",
             description=f"Формат: **{prefix}clean_warn [**Упомянуть участника/ID**] [**Номер варна**]**\nНапример:\n**'clean_warn @Player#0000 1**",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+
+@set_welcome.error
+async def set_welcome_error(ctx, error):
+    global prefix
+    if isinstance(error, commands.MissingRequiredArgument):
+        reply=discord.Embed(
+            title="❌Не указан раздел настроек",
+            description=f"Формат: **{prefix}set_welcome [**Раздел**] [**Аргументы**]**\nСоветую ознакомиться со всеми тонкостями здесь:\n**{prefix}help set_welcome**",
             color=discord.Color.red()
         )
         await ctx.send(embed=reply)
