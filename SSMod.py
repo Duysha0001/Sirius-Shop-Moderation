@@ -22,7 +22,7 @@ async def on_ready():
     if "583016361677160459"!=str(bot_id):
         print("Code isn't currently running Sirius Shop Bot")
     if prefix!="'":
-        print(f"Current prefix is {prefix}, don't forget to change it to '")
+        print(f"Current prefix is {prefix}, don't forget to change it  to '")
 
 #===========Events=============
 @client.event
