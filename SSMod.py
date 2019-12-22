@@ -398,7 +398,7 @@ async def save_task(mode, guild, member, raw_delta):
     now=datetime.datetime.now()
     future=now+delta
     int_fl=all_ints(str(future))
-    future_list=[str(elem) for elem in int_fl]
+    future_list=[str(elem) for elem in int_fl[0:len(int_fl)-1]]
     data=["on", mode, str(guild.id), str(member.id)]
     data.extend(future_list)
     await post_data("tasks", data)
@@ -1611,6 +1611,11 @@ async def send_link(ctx):
             color=discord.Color.blurple()
         )
         await ctx.send(embed=log)
+@client.command()
+async def send_msg(ctx, *, msg):
+    await ctx.send(msg)
+    await ctx.message.delete()
+    
 #=====================Errors==========================
 @mute.error
 async def mute_error(ctx, error):
