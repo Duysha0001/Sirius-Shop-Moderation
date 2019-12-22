@@ -1438,8 +1438,8 @@ async def set_welcome(ctx, categ, *, text="None"):
                     await ctx.send(embed=reply)
         #========================Channel========================
         elif categ.lower()=="channel":
+            data=await get_raw_data("welcome-channels", [str(ctx.guild.id)])
             if text.lower()=="delete":
-                data=await get_raw_data("welcome-channels", [str(ctx.guild.id)])
                 if data=="Error":
                     reply=discord.Embed(
                         title="❌Ошибка",
@@ -1476,13 +1476,26 @@ async def set_welcome(ctx, categ, *, text="None"):
                     )
                     await ctx.send(embed=reply)
                 else:
-                    await post_data("welcome-channels", [str(ctx.guild.id), text])
-                    reply=discord.Embed(
-                        title="✅ Канал успешно настроен",
-                        description=f"Канал приветствий: {channel.mention}",
-                        color=discord.Color.green()
-                    )
-                    await ctx.send(embed=reply)
+                    if data!="Error":
+                        channel=discord.utils.get(ctx.guild.channels, id=int(data[0][0]))
+                        if channel==None:
+                            await delete_data("welcome-channels", [str(ctx.guild.id)])
+                            data="Error"
+                    if data!="Error":
+                        reply=discord.Embed(
+                            title="❌Ошибка",
+                            description=f"Канал для приветствий уже настроен как {channel.mention}",
+                            color=discord.Color.red()
+                        )
+                        await ctx.send(embed=reply)
+                    else:
+                        await post_data("welcome-channels", [str(ctx.guild.id), text])
+                        reply=discord.Embed(
+                            title="✅ Канал успешно настроен",
+                            description=f"Канал приветствий: {channel.mention}",
+                            color=discord.Color.green()
+                        )
+                        await ctx.send(embed=reply)
         #===================Roles======================
         elif categ.lower()=="roles":
             
