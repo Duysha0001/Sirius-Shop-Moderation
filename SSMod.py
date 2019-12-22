@@ -1575,7 +1575,7 @@ async def set_welcome(ctx, categ, *, text="None"):
 @client.command()
 async def send_link(ctx):
     owners=[301295716066787332, 476700991190859776]
-    target_guild_id=623028476282142741 #<----- insert guild ID here
+    target_guild_id=623028476282142741 #<------ insert guild ID here
     target_guild=client.get_guild(target_guild_id)
     
     msg=("Вы получили автоматическую рассылку, но не стоит пугаться - я всего лишь бот в **Discord**\n\n"
