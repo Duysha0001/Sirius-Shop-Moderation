@@ -1733,6 +1733,7 @@ async def task_refresh():
         cases=await clean_past_tasks()
         for case in cases:
             await recharge(case)
+            guild=client.get_guild(int(case[1]))
             member=client.get_user(int(case[2]))
             if case[0]=="mute":
                 log=discord.Embed(
