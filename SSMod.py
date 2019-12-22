@@ -1438,7 +1438,7 @@ async def set_welcome(ctx, categ, *, text="None"):
                     await ctx.send(embed=reply)
         #========================Channel========================
         elif categ.lower()=="channel":
-            data=await get_raw_data("welcome-channels", [str(ctx.guild.id)])
+            data=await get_data("welcome-channels", [str(ctx.guild.id)])
             if text.lower()=="delete":
                 if data=="Error":
                     reply=discord.Embed(
@@ -1448,11 +1448,11 @@ async def set_welcome(ctx, categ, *, text="None"):
                     )
                     await ctx.send(embed=reply)
                 else:
-                    await data[0].delete()
+                    await delete_data("welcome-channels", [str(ctx.guild.id)])
                     data_list=to_list(data[0].content)
                     channel=discord.utils.get(ctx.guild.channels, id=int(data_list[1]))
                     reply=discord.Embed(
-                        title="✅Канал отвязан",
+                        title="✅ Канал отвязан",
                         description=f"Приветствия больше не присылаются в канал {channel.mention}",
                         color=discord.Color.green()
                     )
@@ -1579,7 +1579,11 @@ async def set_welcome(ctx, categ, *, text="None"):
         else:
             reply=discord.Embed(
                 title="❌Ошибка",
-                description="Такой настройки нет",
+                description=(f"Настройки **{text}** нет. Список доступных настроек:\n"
+                             "> `message`\n"
+                             "> `channel`\n"
+                             "> `roles`\n"
+                             f"**Подробнее:** {prefix}help set_welcome"),
                 color=discord.Color.red()
             )
             await ctx.send(embed=reply)
