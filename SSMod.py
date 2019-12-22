@@ -1438,60 +1438,51 @@ async def set_welcome(ctx, categ, *, text="None"):
                     await ctx.send(embed=reply)
         #========================Channel========================
         elif categ.lower()=="channel":
-            channels=await get_data("welcome-channels", [str(ctx.guild.id)])
-            if channels!="Error":
-                reply=discord.Embed(
-                    title="❌Ошибка",
-                    description=f"Канал для приветствий уже есть:\n{channels[0][0]}",
-                    color=discord.Color.red()
-                )
-                await ctx.send(embed=reply)
-            else:
-                if text.lower()=="delete":
-                    data=await get_raw_data("welcome-channels", [str(ctx.guild.id)])
-                    if data=="Error":
-                        reply=discord.Embed(
-                            title="❌Ошибка",
-                            description=f"Канал для приветствий не настроен",
-                            color=discord.Color.red()
-                        )
-                        await ctx.send(embed=reply)
-                    else:
-                        await data[0].delete()
-                        data_list=to_list(data[0].content)
-                        channel=discord.utils.get(ctx.guild.channels, id=int(data_list[1]))
-                        reply=discord.Embed(
-                            title="✅Канал отвязан",
-                            description=f"Приветствия больше не присылаются в канал {channel.mention}",
-                            color=discord.Color.green()
-                        )
-                        await ctx.send(embed=reply)
-                    
-                elif not number(text):
+            if text.lower()=="delete":
+                data=await get_raw_data("welcome-channels", [str(ctx.guild.id)])
+                if data=="Error":
                     reply=discord.Embed(
                         title="❌Ошибка",
-                        description=(f"Пожалуйста, укажите ID канала\nНапример: **{prefix}set_welcome channel {ctx.channel.id}**\n"
-                                     "Или напишите `delete`, чтобы удалить существующий"),
+                        description=f"Канал для приветствий не настроен",
                         color=discord.Color.red()
                     )
                     await ctx.send(embed=reply)
                 else:
-                    channel=discord.utils.get(ctx.guild.channels, id=int(text))
-                    if channel==None:
-                        reply=discord.Embed(
-                            title="❌Ошибка",
-                            description=f"Вы указали **{text}** в качестве ID канала, но канала с таким ID не существует",
-                            color=discord.Color.red()
-                        )
-                        await ctx.send(embed=reply)
-                    else:
-                        await post_data("welcome-channels", [str(ctx.guild.id), text])
-                        reply=discord.Embed(
-                            title="✅ Канал успешно настроен",
-                            description=f"Канал приветствий: {channel.mention}",
-                            color=discord.Color.green()
-                        )
-                        await ctx.send(embed=reply)
+                    await data[0].delete()
+                    data_list=to_list(data[0].content)
+                    channel=discord.utils.get(ctx.guild.channels, id=int(data_list[1]))
+                    reply=discord.Embed(
+                        title="✅Канал отвязан",
+                        description=f"Приветствия больше не присылаются в канал {channel.mention}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=reply)
+                
+            elif not number(text):
+                reply=discord.Embed(
+                    title="❌Ошибка",
+                    description=(f"Пожалуйста, укажите ID канала\nНапример: **{prefix}set_welcome channel {ctx.channel.id}**\n"
+                                 "Или напишите `delete`, чтобы удалить существующий"),
+                    color=discord.Color.red()
+                )
+                await ctx.send(embed=reply)
+            else:
+                channel=discord.utils.get(ctx.guild.channels, id=int(text))
+                if channel==None:
+                    reply=discord.Embed(
+                        title="❌Ошибка",
+                        description=f"Вы указали **{text}** в качестве ID канала, но канала с таким ID не существует",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    await post_data("welcome-channels", [str(ctx.guild.id), text])
+                    reply=discord.Embed(
+                        title="✅ Канал успешно настроен",
+                        description=f"Канал приветствий: {channel.mention}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=reply)
         #===================Roles======================
         elif categ.lower()=="roles":
             
