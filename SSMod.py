@@ -77,7 +77,7 @@ def all_ints(word):
         else:
             number+=letter
     if number!="":
-        out.append(number)
+        out.append(int(number))
     return out
 
 def datetime_from_list(dt_list):
