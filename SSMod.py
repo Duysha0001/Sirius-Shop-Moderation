@@ -22,7 +22,7 @@ async def on_ready():
     if "583016361677160459"!=str(bot_id):
         print("Code isn't currently running Sirius Shop Bot")
     if prefix!="'":
-        print(f"Current prefix is {prefix}, don't forget to change it  to '")
+        print(f"Current prefix is {prefix}, don't forget to change it to '")
 
 #===========Events=============
 @client.event
@@ -605,7 +605,8 @@ async def help(ctx, *, cmd_name=None):
                        f"12) **{p}clean_warns [**Участник**]** - *очистить варны участника*\n"
                        f"13) **{p}clean_warn [**Участник**] [**Номер варна**]** - *снять конкретный варн*\n"
                        f"14) **{p}del [**Кол-во сообщений**]** - *удаляет указанное кол-во сообщений*\n"
-                       f"15) **{p}set_welcome [**Раздел**] [**Аргументы / delete**]** - ***{p}help set_welcome** для подробностей*\n")
+                       f"15) **{p}set_welcome [**Раздел**] [**Аргументы / delete**]** - ***{p}help set_welcome** для подробностей*\n"
+                       f"16) **{p}welcome_info** - *отображает текущие настройки автоматических действий с новичками*\n")
         user_help_list=(f"1) **{p}search [**Запрос/ID**]**\n"
                         f"2) **{p}warns [**Участник**]** - *варны участника*\n"
                         f"3) **{p}server_warns** - *все участники с варнами*\n"
@@ -780,9 +781,12 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                                                  f"**Причина:** {reason}"),
                                     color=discord.Color.darker_grey()
                                 )
-                                await ctx.send(embed=log)
+                                temp_reply=await ctx.send(embed=log)
                                 await post_log(ctx.guild, log)
                                 await polite_send(member, f"Вам ограничили отправку сообщений на сервере **{ctx.guild.name}** на **{raw_time}** {stamp}\nПричина: {reason}")
+                                
+                                await ctx.message.delete()
+                                await temp_reply.edit(delete_after=2)
                                 
                                 await asyncio.sleep(time)
                                 
@@ -850,8 +854,11 @@ async def unmute(ctx, raw_user):
                         description=f'**{member.mention}** был разблокирован',
                         color=discord.Color.darker_grey()
                     )
-                    await ctx.send(embed=log)
+                    temp_reply=await ctx.send(embed=log)
                     await post_log(ctx.guild, log)
+                    
+                    await ctx.message.delete()
+                    await temp_reply.edit(delete_after=2)
                 
 @client.command(aliases=["blacklist"])
 async def black(ctx):
@@ -916,9 +923,12 @@ async def kick(ctx, raw_user, *, reason="не указана"):
                                      f"Кикнут пользователем: {ctx.author.mention}"),
                         color=discord.Color.blurple()
                     )
-                    await ctx.send(embed=log)
+                    temp_reply=await ctx.send(embed=log)
                     await post_log(ctx.guild, log)
                     await polite_send(member, f"Вы были кикнуты с сервера **{ctx.guild.name}**.\n**Причина:** {reason}")
+                    
+                    await ctx.message.delete()
+                    await temp_reply.edit(delete_after=2)
                 
 @client.command()
 async def ban(ctx, raw_user, *, reason="не указана"):
@@ -965,9 +975,12 @@ async def ban(ctx, raw_user, *, reason="не указана"):
                         description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}",
                         color=discord.Color.dark_red()
                     )
-                    await ctx.send(embed=log)
+                    temp_reply=await ctx.send(embed=log)
                     await post_log(ctx.guild, log)
                     await polite_send(member, f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}")
+                    
+                    await ctx.message.delete()
+                    await temp_reply.edit(delete_after=2)
 
 @client.command()
 async def unban(ctx, *, member=None):
@@ -1006,9 +1019,12 @@ async def unban(ctx, *, member=None):
                     description=f"Пользователь был разбанен администратором **{ctx.author}**",
                     color=discord.Color.dark_green()
                 )
-                await ctx.send(embed=log)
+                temp_reply=await ctx.send(embed=log)
                 await post_log(ctx.guild, log)
                 await polite_send(unbanned, f"Вы были разбанены на сервере **{ctx.guild.name}**")
+                
+                await ctx.message.delete()
+                await temp_reply.edit(delete_after=2)
 
 @client.command()
 async def tempban(ctx, raw_user, raw_time, *, reason=""):
@@ -1077,11 +1093,15 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
                                 description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}\nДлительность: {raw_time} {stamp}",
                                 color=discord.Color.dark_red()
                             )
-                            await ctx.send(embed=log)
+                            temp_reply=await ctx.send(embed=log)
                             await post_log(ctx.guild, log)
                             await polite_send(member, f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}\nДлительность: {raw_time} {stamp}")
                             
+                            await ctx.message.delete()
+                            await temp_reply.edit(delete_after=2)
+                            
                             await asyncio.sleep(time)
+                            
                             case=await delete_task("ban", ctx.guild, member)
                             await recharge(case)
                             log=discord.Embed(
@@ -1178,9 +1198,12 @@ async def warn(ctx, raw_user, *, reason="не указана"):
                              f"**Модератор:** {ctx.author.mention}\n"),
                 color=discord.Color.orange()
             )
-            await ctx.send(embed=log)
+            temp_reply=await ctx.send(embed=log)
             await post_log(ctx.guild, log)
             await polite_send(member, f"Вы были предупреждены на сервере **{ctx.guild}** модератором {ctx.author.mention}\nПричина: {reason}")
+            
+            await ctx.message.delete()
+            await temp_reply.edit(delete_after=2)
             
 @client.command()
 async def warns(ctx, raw_user):
@@ -1588,11 +1611,61 @@ async def set_welcome(ctx, categ, *, text="None"):
             )
             await ctx.send(embed=reply)
 
+@client.command()
+async def welcome_info(ctx):
+    global bot_id
+    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
+    
+    str_ID_list=await get_data("welcome-roles", [str(ctx.guild.id)])
+    role_list=[]
+    if str_ID_list=="Error":
+        role_list=["Не настроены"]
+    else:
+        cant_add=["**Роли, выдавать которые я не имею права**"]
+        for str_ID in str_ID_list:
+            ID=int(str_ID)
+            role=discord.utils.get(ctx.guild.roles, id=ID)
+            if role==None:
+                await delete_data("welcome-roles", [str(ctx.guild.id), str_ID])
+            else:
+                role_list.append(f"**1)** {role.name}")
+                if role.position>=await glob_pos(bot_user):
+                    cant_add.append(f"**1)** {role.name}")
+        if len(cant_add)<2:
+            cant_add=[]
+    
+    w_channel_str_ID=await get_data("welcome-channels", [str(ctx.guild.id)])
+    if w_channel_str_ID=="Error":
+        channel_name="Не настроен"
+    else:
+        w_channel_ID=int(w_channel_str_ID[0][0])
+        channel=discord.utils.get(ctx.guild.channels, id=w_channel_ID)
+        if channel==None:
+            await delete_data("welcome-channels", [str(ctx.guild.id), w_channel_str_ID])
+            channel_name="Удалён"
+        else:
+            channel_name=channel.mention
+    
+    w_message=await get_data("welcome-msg", [str(ctx.guild.id)])
+    if w_message=="Error":
+        msg_info="Не настроено"
+    else:
+        msg_info=w_message[0][0]
+    
+    reply=discord.Embed(
+        title="Автоматические действия с пользователем",
+        description=(f"{list_sum(role_list)}\n{list_sum(cant_add)}"
+                     f"**Канал приветствий:** {channel_name}\n"
+                     f"**Приветственное сообщение:**\n{msg_info}"),
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=reply)
+
 #=================Secret Commands=========
 @client.command()
 async def send_link(ctx):
     owners=[301295716066787332, 476700991190859776]
-    target_guild_id=623028476282142741 #<------ insert guild ID here
+    target_guild_id=623028476282142741 #<----- insert guild ID here
     target_guild=client.get_guild(target_guild_id)
     
     msg=("Вы получили автоматическую рассылку, но не стоит пугаться - я всего лишь бот в **Discord**\n\n"
@@ -1730,6 +1803,7 @@ async def set_welcome_error(ctx, error):
             color=discord.Color.red()
         )
         await ctx.send(embed=reply)
+
 #===========Tasks=========
 async def task_refresh():
     while True:
