@@ -1617,20 +1617,21 @@ async def welcome_info(ctx):
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
     str_ID_list=await get_data("welcome-roles", [str(ctx.guild.id)])
-    role_list=[]
     if str_ID_list=="Error":
         role_list=["Не настроены"]
+        cant_add=[]
     else:
-        cant_add=["**Роли, выдавать которые я не имею права**"]
+        role_list=[]
+        cant_add=["**Роли, выдавать которые я не имею права:**"]
         for str_ID in str_ID_list:
-            ID=int(str_ID)
+            ID=int(str_ID[0])
             role=discord.utils.get(ctx.guild.roles, id=ID)
             if role==None:
-                await delete_data("welcome-roles", [str(ctx.guild.id), str_ID])
+                await delete_data("welcome-roles", [str(ctx.guild.id), str_ID[0]])
             else:
-                role_list.append(f"**1)** {role.name}")
+                role_list.append(f"1) **{role.name}**")
                 if role.position>=await glob_pos(bot_user):
-                    cant_add.append(f"**1)** {role.name}")
+                    cant_add.append(f"> {role.name}")
         if len(cant_add)<2:
             cant_add=[]
     
@@ -1641,7 +1642,7 @@ async def welcome_info(ctx):
         w_channel_ID=int(w_channel_str_ID[0][0])
         channel=discord.utils.get(ctx.guild.channels, id=w_channel_ID)
         if channel==None:
-            await delete_data("welcome-channels", [str(ctx.guild.id), w_channel_str_ID])
+            await delete_data("welcome-channels", [str(ctx.guild.id), w_channel_str_ID[0][0]])
             channel_name="Удалён"
         else:
             channel_name=channel.mention
@@ -1651,10 +1652,9 @@ async def welcome_info(ctx):
         msg_info="Не настроено"
     else:
         msg_info=w_message[0][0]
-    
     reply=discord.Embed(
         title="Автоматические действия с пользователем",
-        description=(f"{list_sum(role_list)}\n{list_sum(cant_add)}"
+        description=(f"**Роли:** {list_sum(role_list)}\n{list_sum(cant_add)}"
                      f"**Канал приветствий:** {channel_name}\n"
                      f"**Приветственное сообщение:**\n{msg_info}"),
         color=discord.Color.green()
