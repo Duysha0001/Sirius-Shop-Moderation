@@ -4,6 +4,8 @@ from discord.ext.commands import Bot
 import asyncio
 import datetime
 import os
+from emoji import UNICODE_EMOJI
+import random
 
 prefix="'"
 client=commands.Bot(command_prefix=prefix)
@@ -13,26 +15,16 @@ mute_role_name="Мут"
 
 client.remove_command('help')
 
-#=========Ready event============
+#=========Events ready============
 @client.event
 async def on_ready():
     global bot_id
     global prefix
     print("Ready to moderate")
-    if "583016361677160459"!=str(bot_id):
-        print("Code isn't currently running Sirius Shop Bot")
-    if prefix!="'":
-        print(f"Current prefix is {prefix}, don't forget to change it to '")
-
-#===========Events=============
-@client.event
-async def on_member_join(member):
-    await refresh_mute(member)
-    await send_welcome(member)
-    
-#@client.event
-#async def on_member_remove(member):
-    #await delete_data("warns", [str(member.guild.id), str(member.id)])
+    if "589922044720709656"!=str(bot_id):
+        print("Code isn't currently running TASPA Moderation Bot")
+    if prefix!="t!":
+        print(f"Current prefix is {prefix}, don't forget to change it to t!")
 
 #========Bot minor tools=======
 def number(s):
@@ -122,8 +114,32 @@ def detect_args(text, lll):
             else:
                 iso=True
                 start=i
-    return out    
-    
+    return out
+
+def c_split(text, lll):
+    out=[]
+    wid=len(lll)
+    text_l=len(text)
+    start=0
+    end=-1
+    for i in range(text_l-wid+1):
+        if text[i:i+wid]==lll:
+            end=i
+            if start<end:
+                out.append(text[start:end])
+            start=i+wid
+    if end!=text_l-wid:
+        out.append(text[start:text_l])
+    return out
+
+def is_emoji(s):
+    count = 0
+    for emoji in UNICODE_EMOJI:
+        count += s.count(emoji)
+        if count > 1:
+            return False
+    return bool(count)
+
 #========Database Minor tools=======
 def to_raw(data_list):
     out=""
@@ -142,6 +158,15 @@ def to_list(data_raw):
             elem+=letter
     return out
     
+def c_partially(data_1, ethalone):
+    depth=len(ethalone)
+    buffer=[elem for elem in ethalone]
+    for i in range(len(data_1)):
+        if data_1[i]=="None":
+            if i<depth:
+                buffer[i]="None"
+    return True if data_1==buffer else False
+
 #========Databse functions=======
 async def post_data(folder, data_list):
     global db_id
@@ -154,7 +179,7 @@ async def post_data(folder, data_list):
         await db_server.create_text_channel(folder)
     folder = discord.utils.get(db_server.channels, name=folder)
     check=0
-    async for file in folder.history(limit=100):
+    async for file in folder.history(limit=None):
         if file.content==data_raw:
             check=1
             break
@@ -173,15 +198,10 @@ async def get_data(folder, key_words):
         folder = discord.utils.get(db_server.channels, name=folder)
         open_folder=[]
         folder_depth=len(key_words)
-        prev_id=None
-        async for file in folder.history(limit=100):
-            if file.id==prev_id:
-                break
-            else:
-                prev_id=file.id
-                data=to_list(file.content)
-                if data[0:folder_depth]==key_words:
-                    open_folder.append(data[folder_depth:len(data)])
+        async for file in folder.history(limit=None):
+            data=to_list(file.content)
+            if c_partially(key_words, data[0:folder_depth]):
+                open_folder.append(data[folder_depth:len(data)])
                 
         if open_folder==[]:
             return "Error"
@@ -200,19 +220,14 @@ async def edit_data(folder_name, key_words, full_edit_list):
         return "Error"
     else:
         folder = discord.utils.get(db_server.channels, name=folder_name)
-        exist="Error"
-        prev_id=None
-        async for file in folder.history(limit=100):
-            if file.id==prev_id:
-                break
-            else:
-                prev_id=file.id
-                data_list=to_list(file.content)
-                if data_list[0:folder_depth]==key_words:
-                    exist="Success"
-                    await file.edit(content=edit_raw)
+        exist=False
+        async for file in folder.history(limit=None):
+            data_list=to_list(file.content)
+            if c_partially(key_words, data_list[0:folder_depth]):
+                exist=True
+                await file.edit(content=edit_raw)
                 
-        if exist=="Error":
+        if exist==False:
             return "Error"
             
 async def delete_data(folder, key_words):
@@ -225,19 +240,16 @@ async def delete_data(folder, key_words):
     if not folder in folders:
         return "Error"
     else:
-        
         folder = discord.utils.get(db_server.channels, name=folder)
-        folder_files=[]
-        async for file in folder.history(limit=100):
+        found=False
+        async for file in folder.history(limit=None):
             data_list=to_list(file.content)
-            if data_list[0:folder_depth]==key_words:
-                folder_files.append(file)
+            if c_partially(key_words, data_list[0:folder_depth]):
+                found=True
+                file.delete()
                 
-        if folder_files==[]:
+        if found==False:
             return "Error"
-        else:
-            for data in folder_files:
-                await data.delete()
             
 async def delete_folder(folder):
     global db_id
@@ -262,13 +274,8 @@ async def get_folder(folder):
     else:
         folder = discord.utils.get(db_server.channels, name=folder)
         folder_list=[]
-        prev_id=None
-        async for file in folder.history(limit=100):
-            if file.id==prev_id:
-                break
-            else:
-                prev_id=file.id
-                folder_list.append(to_list(file.content))
+        async for file in folder.history(limit=None):
+            folder_list.append(to_list(file.content))
         return folder_list
 
 async def get_raw_folder(folder):
@@ -282,13 +289,8 @@ async def get_raw_folder(folder):
     else:
         folder = discord.utils.get(db_server.channels, name=folder)
         folder_list=[]
-        prev_id=None
-        async for file in folder.history(limit=100):
-            if file.id==prev_id:
-                break
-            else:
-                prev_id=file.id
-                folder_list.append(file)
+        async for file in folder.history(limit=None):
+            folder_list.append(file)
         return folder_list    
     
 async def get_raw_data(folder, key_words):
@@ -303,15 +305,10 @@ async def get_raw_data(folder, key_words):
         folder = discord.utils.get(db_server.channels, name=folder)
         open_folder=[]
         folder_depth=len(key_words)
-        prev_id=None
-        async for file in folder.history(limit=100):
-            if file.id==prev_id:
-                break
-            else:
-                prev_id=file.id
-                data=to_list(file.content)
-                if data[0:folder_depth]==key_words:
-                    open_folder.append(file)
+        async for file in folder.history(limit=None):
+            data=to_list(file.content)
+            if c_partially(key_words, data[0:folder_depth]):
+                open_folder.append(file)
                 
         if open_folder==[]:
             return "Error"
@@ -319,6 +316,26 @@ async def get_raw_data(folder, key_words):
             return open_folder
 
 #============Bot async funcs==========
+async def users(server):
+    await client.wait_until_ready()
+    summ=0
+    bots=0
+    for user in server.members:
+        summ+=1
+        if user.bot==1:
+            bots+=1
+    channel=discord.utils.get(server.channels, name='stats')
+    if channel in server.channels:
+        stats=discord.Embed(
+            title=':bar_chart: __**Server stats**__ :bar_chart:',
+            color=discord.Color.green()
+        )
+        stats.add_field(name='Total users:', value=f'**{summ}**')
+        stats.add_field(name='Total bots:', value=f'**{bots}**')
+        stats.add_field(name='Total humans:', value=f'**{summ-bots}**')
+        await channel.purge(limit=1)
+        await channel.send(embed=stats)
+
 async def has_helper(user, guild):
     mmcheck=False
     if guild.owner.id==user.id:
@@ -383,15 +400,6 @@ async def setup_mute(guild):
         await channel.set_permissions(mute_role, send_messages=False)
     for channel in guild.voice_channels:
         await channel.set_permissions(mute_role, speak=False)
-    
-        
-async def detect_member(guild, raw_search):
-    status="Error"
-    for m in guild.members:
-        if raw_search==m.mention or raw_search==f"<@!{m.id}>" or raw_search==str(m.id) or raw_search==f"<@{m.id}>":
-            status=m
-            break
-    return status
     
 async def save_task(mode, guild, member, raw_delta):
     delta=datetime.timedelta(seconds=raw_delta)
@@ -526,7 +534,7 @@ async def polite_send(user, msg):
         return "Error"
     else:
         pass    
-    
+
 async def refresh_mute(member):
     global db_id
     global mute_role_name
@@ -551,8 +559,8 @@ async def refresh_mute(member):
                 data=to_list(file.content)
                 if data[1:4]==key_words:
                     await member.add_roles(Mute)
-                    break
-
+                    break    
+    
 async def send_welcome(member):
     global bot_id
     bot_user=discord.utils.get(member.guild.members, id=bot_id)
@@ -584,45 +592,292 @@ async def send_welcome(member):
             role=discord.utils.get(member.guild.roles, id=int(str_ID))
             if role!=None and role.position<await glob_pos(bot_user):
                 await member.add_roles(role)
+
+async def send_leave(member):
+    global bot_id
+    bot_user=discord.utils.get(member.guild.members, id=bot_id)
     
+    channels=await get_data("leave-channels", [str(member.guild.id)])
+    if channels!="Error":
+        ID=int(channels[0][0])
+        channel=discord.utils.get(member.guild.channels, id=ID)
+        messages=await get_data("leave-msg", [str(member.guild.id)])
+        if messages!="Error":
+            arg_names=["server", "user"]
+            arg_values=[member.guild, member.mention]
+            message=messages[0][0]
+            arg_data=detect_args(message, "==")
+            text=""
+            prev_end=0
+            for triplet in arg_data:
+                if triplet[0].lower() in arg_names:
+                    ind=arg_names.index(triplet[0].lower())
+                    start=triplet[1]
+                    end=triplet[2]
+                    text+=f"{message[prev_end:start]}{arg_values[ind]}"
+                    prev_end=end
+            text+=f"{message[prev_end:len(message)]}"
+            await polite_send(channel, text)
+
+async def detect_role(guild, raw_search):
+    out="Error"
+    for r in guild.roles:
+        if raw_search==f"<@&{r.id}>" or raw_search==str(r.id):
+            out=r
+            break
+    return out
+
+async def detect_channel(guild, raw_search):
+    out="Error"
+    for channel in guild.channels:
+        if raw_search==f"<#{channel.id}>" or raw_search==str(channel.id):
+            out=channel
+            break
+    return out
+
+async def detect_member(guild, raw_search):
+    status="Error"
+    for m in guild.members:
+        if raw_search==m.mention or raw_search==f"<@!{m.id}>" or raw_search==str(m.id) or raw_search==f"<@{m.id}>":
+            status=m
+            break
+    return status
+
+async def detect_emoji(guild, raw_search):
+    out="Error"
+    for emoji in guild.emojis:
+        if raw_search==f"<:{emoji.name}:{emoji.id}>":
+            out=emoji
+            break
+    if out=="Error":
+        if is_emoji(raw_search):
+            out=raw_search
+    return out
+
+async def detect_message(channel_id, message_id):
+    channel=client.get_channel(int(channel_id))
+    if channel==None:
+        return "Error"
+    else:
+        try:
+            message=await channel.fetch_message(int(message_id))
+        except BaseException:
+            return "Error"
+        else:
+            return message
+    
+async def read_message(channel, user, t_out):
+    try:
+        msg=await client.wait_for("message", check=lambda message: user.id==message.author.id and channel.id==message.channel.id, timeout=t_out)
+    except asyncio.TimeoutError:
+        reply=discord.Embed(
+            title="🕑 Вы слишком долго не писали",
+            description=f"Настройка прервана",
+            color=discord.Color.blurple()
+        )
+        await channel.send(content=user.mention, embed=reply)
+        return "Timeout"
+    else:
+        return msg
+
+async def save_giveaway(guild, message, winner_num, host_user, prize, raw_delta):
+    delta=datetime.timedelta(seconds=raw_delta)
+    now=datetime.datetime.now()
+    future=now+delta
+    int_fl=all_ints(str(future))
+    future_list=[str(elem) for elem in int_fl[0:len(int_fl)-1]]
+    data=["on", str(guild.id), str(message.id), str(winner_num), str(host_user.id), str(message.channel.id), prize]
+    data.extend(future_list)
+    await post_data("giveaways", data)
+
+async def finish_giveaway(message):
+    guild=message.guild
+    files=await get_raw_data("giveaways", ["None", str(guild.id), str(message.id)])
+    message=await detect_message(message.channel.id, message.id)
+    #files = [on/off, guild_id, message_id, winner_num, host_id, channel_id, prize, yyyy, mm, dd, hh, mm, ss]
+    if files!="Error":
+        file=files[0]
+        users=await reacted(message)
+        
+        await file.delete()
+        
+        data=to_list(file.content)
+        winner_num=int(data[3])
+        g_name=data[6]
+        host_user_id=int(data[4])
+        host_user=discord.utils.get(guild.members, id=host_user_id)
+        channel=message.channel
+        
+        winners=[]
+        for i in range(winner_num):
+            if users!=[]:
+                winner_id=random.choice(users)
+                users.remove(winner_id)
+                
+                winner=discord.utils.get(guild.members, id=winner_id)
+                if winner!=None:
+                    winners.append(winner)
+            else:
+                break
+            
+        if winners==[]:
+            error_embed=discord.Embed(
+                title="⚠ Сбой",
+                description=(f"**Приз:** {g_name}\n"
+                             "Не могу распознать победителей"),
+                color=discord.Color.gold()
+            )
+            await channel.send(embed=error_embed)
+        else:
+            winner_table=""
+            for w in winners:
+                winner_table+=f"{w.mention}\n"
+            if host_user==None:
+                host_ment="не найден"
+            else:
+                host_ment=host_user.mention
+            g_end_embed=discord.Embed(
+                title="🎉 Результаты",
+                description=(f"**Приз:** {g_name}\n"
+                             f"**Хост:** {host_ment}\n"
+                             f"**Победители:**\n{winner_table}"),
+                color=discord.Color.gold()
+            )
+            await channel.send(embed=g_end_embed)
+
+async def closest_giveaway():
+    files=await get_raw_data("giveaways", ["off"])
+    out="Error"
+    if files!="Error":
+        now=datetime.datetime.now()
+        
+        data=to_list(files[0].content)
+        future_str=data[len(data)-6:len(data)]
+        future=datetime_from_list(future_str)
+        min_delta=future-now
+        
+        guild_id=int(data[1])
+        channel_id=int(data[5])
+        message_id=int(data[2])
+        
+        message=await detect_message(channel_id, message_id)
+        out=[message, min_delta.seconds]
+        
+        pinned=files[0]
+        
+        for file in files:
+            data=to_list(file.content)
+            
+            future_str=data[len(data)-6:len(data)]
+            future=datetime_from_list(future_str)
+            delta=future-now
+            
+            if delta<min_delta:
+                min_delta=delta
+                
+                channel_id=int(data[5])
+                message_id=int(data[2])
+                
+                message=await detect_message(channel_id, message_id)
+                out=[message, min_delta.seconds]
+                
+                pinned=file
+                
+        data=to_list(pinned.content)
+        data[0]="on"
+        await pinned.edit(content=to_raw(data))
+    return out
+    
+async def clean_past_giveaways():
+    files=await get_raw_folder("giveaways")
+    out=[]
+    if files!="Error":
+        now=datetime.datetime.now()
+        for file in files:
+            data=to_list(file.content)
+            
+            last=len(data)
+            future_raw=data[last-6:last]
+            future=datetime_from_list(future_raw)
+            
+            if future<=now:
+                message_id=int(data[2])
+                channel_id=int(data[5])
+                message=await detect_message(channel_id, message_id)
+                if message!="Error":
+                    out.append(message)
+    return out
+    
+async def reset_giveaways():
+    files=await get_raw_data("giveaways", ["on"])
+    if files!="Error":
+        for file in files:
+            data=to_list(file.content)
+            data[0]="off"
+            await file.edit(content=to_raw(data))
+    
+async def reacted(message):
+    bot_id=client.user.id
+    reaction=None
+    rs=message.reactions
+    for r in rs:
+        if r.emoji=='🎉':
+            reaction=r
+            break
+    if reaction==None:
+        return []
+    else:
+        users=[]
+        async for user in reaction.users():
+            if user.id!=bot_id:
+                users.append(user.id)
+        return users
+
 #=============Commands=============
 @client.command()
 async def help(ctx, *, cmd_name=None):
     global prefix
     p=prefix
     if cmd_name==None:
-        adm_help_list=(f"1) **{p}mute [**Участник**] [**Время**] [**Причина**]**\n"
+        adm_help_list1=(f"1) **{p}mute [**Участник**] [**Время**] <**Причина**>**\n"
                        f"2) **{p}unmute [**Участник**]**\n"
                        f"3) **{p}black** - *список заблокированных пользователей*\n"
-                       f"4) **{p}kick [**Участник**] [**Причина**]**\n"
-                       f"5) **{p}ban [**Участник**] [**Причина**]**\n"
-                       f"6) **{p}tempban [**Участник**] [**Время**] [**Причина**]**\n"
+                       f"4) **{p}kick [**Участник**] <**Причина**>**\n"
+                       f"5) **{p}ban [**Участник**] <**Причина**>**\n"
+                       f"6) **{p}tempban [**Участник**] [**Время**] <**Причина**>**\n"
                        f"7) **{p}unban [**Участник**]**\n"
                        f"8) **{p}set_log_channel [**ID канала**]** - *настраивает канал для логов*\n"
                        f"9) **{p}remove_log_channel [**ID канала**]** - *отвязывает канал от логов*\n"
                        f"10) **{p}set_mute_role** - *перенастраивает роль мута в каждом канале*\n"
-                       f"11) **{p}warn [**Участник**] [**Причина**]**\n"
+                       f"11) **{p}warn [**Участник**] <**Причина**>**\n"
                        f"12) **{p}clean_warns [**Участник**]** - *очистить варны участника*\n"
                        f"13) **{p}clean_warn [**Участник**] [**Номер варна**]** - *снять конкретный варн*\n"
                        f"14) **{p}del [**Кол-во сообщений**]** - *удаляет указанное кол-во сообщений*\n"
                        f"15) **{p}set_welcome [**Раздел**] [**Аргументы / delete**]** - ***{p}help set_welcome** для подробностей*\n"
                        f"16) **{p}welcome_info** - *отображает текущие настройки автоматических действий с новичками*\n")
+        adm_help_list2=(f"17) **{p}reaction_roles <**Заголовок**>** - *начинает создание вывески с раздачей ролей за реакции*\n"
+                        f"18) **{p}set_leave [**Раздел**] [**Аргумент / delete**]** - ***{p}help set_leave** для подробностей*\n")
         user_help_list=(f"1) **{p}search [**Запрос/ID**]**\n"
                         f"2) **{p}warns [**Участник**]** - *варны участника*\n"
                         f"3) **{p}server_warns** - *все участники с варнами*\n"
-                        f"4) **{p}embed [**Текст**]** - ***{p}help embed** для подробностей*\n")
+                        f"4) **{p}embed [**Текст**]** - ***{p}help embed** для подробностей*\n"
+                        f"5) **{p}altshift [**Текст**]** - *переключает раскладку для написанного текста*\n"
+                        f"6) **{p}avatar <**Пользователь**>** - *рассмотреть свою/чужую аватарку*\n"
+                        f"7) **{p}set_giveaway** - *начинает настройку розыгрыша*\n")
         
         help_msg=discord.Embed(
             title="Help menu",
             color=discord.Color.from_rgb(201, 236, 160)
             )
         help_msg.add_field(name="**Команды пользователей**", value=user_help_list, inline=False)
-        help_msg.add_field(name="**Команды модераторов**", value=adm_help_list, inline=False)
+        help_msg.add_field(name="**Команды модераторов**", value=adm_help_list1, inline=False)
+        help_msg.add_field(name="Страница 2", value=adm_help_list2, inline=False)
+        help_msg.set_footer(text="В скобках [] - обязательный аргумент\nВ скобках <> - необязательный")
         
         await ctx.send(embed=help_msg)
     else:
         cmd_name=cmd_name.lower()
-        command_names=["embed", "set_welcome"]
+        command_names=["embed", "set_welcome", "set_leave"]
         command_descs=[
             ("**Описание:** позволяет отправить сообщение в рамке, имеет ряд настроек кастомизации такого сообщения.\n"
              "**Применение:**\n"
@@ -643,13 +898,25 @@ async def help(ctx, *, cmd_name=None):
              "> Чтобы отображалось название сервера, напишите `==server==` в нужном Вам месте\n"
              f"*Пример: {p}set_welcome message Добро пожаловать на сервер ==server==, ==user==!*\n"
              "Раздел `channel`:\n"
-             "> Этот раздел требует ID канала для приветствий\n"
+             "> Этот раздел требует канал (или его ID) для приветствий\n"
              f"*Пример: {p}set_welcome channel {ctx.channel.id}*\n"
              "Раздел `roles`\n"
-             "> Этот раздел требует список ID ролей, которые будут выдаваться каждому участнику при входе\n"
+             "> Этот раздел требует список ролей (или их ID), которые будут выдаваться каждому участнику при входе\n"
              "> Для удаления конкретных ролей из уже настроенных таким образом, напишите `delete` вместо списка ID\n"
              f"*Пример: {p}set_welcome roles {'123'*6}*\n\n"
-             f"**Как удалить уже настроенные действия?**\n**{p}set_welcome [**Раздел**] delete**\n")
+             f"**Как удалить уже настроенные действия?**\n**{p}set_welcome [**Раздел**] delete**\n"),
+            ("**Описание:** позволяет настроить отчёт о выходе участника с сервера, имеет 2 раздела настроек\n"
+             f"**Применение:** **{p}set_leave [**раздел**] [**аргумент / delete**]**\n"
+             "**Разделы:** `message, channel`\n"
+             "Раздел `message`:\n"
+             "> Этот раздел требует ввести сообщение, которое будет отправляться в случае выхода участника с сервера\n"
+             "> Чтобы в сообщении упоминался вышедший, напишите `==user==` в том месте, где он должен быть упомянут\n"
+             "> Чтобы отображалось название сервера, напишите `==server==` в нужном Вам месте\n"
+             f"*Пример: {p}set_leave message ==user== вышел с сервера ==server==*\n"
+             "Раздел `channel`:\n"
+             "> Этот раздел требует канал (или его ID) для приветствий\n"
+             f"*Пример: {p}set_leave channel {ctx.channel.id}*\n\n"
+             f"**Как удалить уже настроенные действия?**\n**{p}set_leave [**Раздел**] delete**\n")
                        ]
         
         if not cmd_name in command_names:
@@ -669,13 +936,12 @@ async def help(ctx, *, cmd_name=None):
             await ctx.send(embed=help_msg)
 
 @client.command()
-async def set_log_channel(ctx, channel_id):
-    channel_IDs=[str(c.id) for c in ctx.guild.channels]
-    if not channel_id in channel_IDs:
+async def set_log_channel(ctx, raw_channel):
+    channel=await detect_channel(ctx.guild, raw_channel)
+    if channel=="Error":
         await ctx.send("Канал не найден")
     else:
-        channel=discord.utils.get(ctx.guild.channels, id=int(channel_id))
-        await post_data("log-channels", [str(ctx.guild.id), channel_id])
+        await post_data("log-channels", [str(ctx.guild.id), str(channel.id)])
         reply=discord.Embed(
             title="Настройка завершена",
             description=f"Канал для логов успешно настроен как {channel.mention}",
@@ -684,13 +950,12 @@ async def set_log_channel(ctx, channel_id):
         await ctx.send(embed=reply)
 
 @client.command()
-async def remove_log_channel(ctx, channel_id):
-    channel_IDs=[str(c.id) for c in ctx.guild.channels]
-    if not channel_id in channel_IDs:
+async def remove_log_channel(ctx, raw_channel):
+    channel=await detect_channel(ctx.guild, raw_channel)
+    if channel=="Error":
         await ctx.send("Канал не найден")
     else:
-        channel=discord.utils.get(ctx.guild.channels, id=int(channel_id))
-        await delete_data("log-channels", [str(ctx.guild.id), channel_id])
+        await delete_data("log-channels", [str(ctx.guild.id), str(channel.id)])
         reply=discord.Embed(
             title="Канал отвязан",
             description=f"Канал для логов успешно отвязан от {channel.mention}",
@@ -781,12 +1046,11 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                                                  f"**Причина:** {reason}"),
                                     color=discord.Color.darker_grey()
                                 )
-                                temp_reply=await ctx.send(embed=log)
+                                temp_log=await ctx.send(embed=log)
                                 await post_log(ctx.guild, log)
                                 await polite_send(member, f"Вам ограничили отправку сообщений на сервере **{ctx.guild.name}** на **{raw_time}** {stamp}\nПричина: {reason}")
                                 
-                                await ctx.message.delete()
-                                await temp_reply.edit(delete_after=2)
+                                await temp_log.edit(delete_after=3)
                                 
                                 await asyncio.sleep(time)
                                 
@@ -854,11 +1118,10 @@ async def unmute(ctx, raw_user):
                         description=f'**{member.mention}** был разблокирован',
                         color=discord.Color.darker_grey()
                     )
-                    temp_reply=await ctx.send(embed=log)
+                    temp_log=await ctx.send(embed=log)
                     await post_log(ctx.guild, log)
                     
-                    await ctx.message.delete()
-                    await temp_reply.edit(delete_after=2)
+                    await temp_log.edit(delete_after=3)
                 
 @client.command(aliases=["blacklist"])
 async def black(ctx):
@@ -923,12 +1186,11 @@ async def kick(ctx, raw_user, *, reason="не указана"):
                                      f"Кикнут пользователем: {ctx.author.mention}"),
                         color=discord.Color.blurple()
                     )
-                    temp_reply=await ctx.send(embed=log)
+                    temp_log=await ctx.send(embed=log)
                     await post_log(ctx.guild, log)
                     await polite_send(member, f"Вы были кикнуты с сервера **{ctx.guild.name}**.\n**Причина:** {reason}")
                     
-                    await ctx.message.delete()
-                    await temp_reply.edit(delete_after=2)
+                    await temp_log.edit(delete_after=3)
                 
 @client.command()
 async def ban(ctx, raw_user, *, reason="не указана"):
@@ -975,12 +1237,11 @@ async def ban(ctx, raw_user, *, reason="не указана"):
                         description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}",
                         color=discord.Color.dark_red()
                     )
-                    temp_reply=await ctx.send(embed=log)
+                    temp_log=await ctx.send(embed=log)
                     await post_log(ctx.guild, log)
                     await polite_send(member, f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}")
                     
-                    await ctx.message.delete()
-                    await temp_reply.edit(delete_after=2)
+                    await temp_log.edit(delete_after=3)
 
 @client.command()
 async def unban(ctx, *, member=None):
@@ -1019,12 +1280,11 @@ async def unban(ctx, *, member=None):
                     description=f"Пользователь был разбанен администратором **{ctx.author}**",
                     color=discord.Color.dark_green()
                 )
-                temp_reply=await ctx.send(embed=log)
+                temp_log=await ctx.send(embed=log)
                 await post_log(ctx.guild, log)
                 await polite_send(unbanned, f"Вы были разбанены на сервере **{ctx.guild.name}**")
                 
-                await ctx.message.delete()
-                await temp_reply.edit(delete_after=2)
+                await temp_log.edit(delete_after=3)
 
 @client.command()
 async def tempban(ctx, raw_user, raw_time, *, reason=""):
@@ -1090,15 +1350,14 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
                             
                             log=discord.Embed(
                                 title=f"**{member}** был забанен",
-                                description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}\nДлительность: {raw_time} {stamp}",
+                                description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}\n**Длительность:** {raw_time} {stamp}",
                                 color=discord.Color.dark_red()
                             )
-                            temp_reply=await ctx.send(embed=log)
+                            temp_log=await ctx.send(embed=log)
                             await post_log(ctx.guild, log)
-                            await polite_send(member, f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}\nДлительность: {raw_time} {stamp}")
+                            await polite_send(member, f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}\n**Длительность:** {raw_time} {stamp}")
                             
-                            await ctx.message.delete()
-                            await temp_reply.edit(delete_after=2)
+                            await temp_log.edit(delete_after=3)
                             
                             await asyncio.sleep(time)
                             
@@ -1106,8 +1365,8 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
                             await recharge(case)
                             log=discord.Embed(
                                 title=f"**{member}** был разбанен",
-                                description=f"**Ранее был забанен модератором:** {ctx.author.mention}\nДлительность: {raw_time} {stamp}",
-                                color=discord.Color.dark_red()
+                                description=f"**Ранее был забанен модератором:** {ctx.author.mention}\n**Длительность:** {raw_time} {stamp}",
+                                color=discord.Color.dark_green()
                             )
                             await post_log(ctx.guild, log)
                             await polite_send(member, f"Вы были разбанены на сервере **{ctx.guild.name}**")
@@ -1172,7 +1431,7 @@ async def search(ctx, raw_request):
     
 @client.command()
 async def warn(ctx, raw_user, *, reason="не указана"):
-    if not await can_ban(ctx.author, ctx.guild):
+    if not await has_helper(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Недостаточно прав",
             color=discord.Color.red()
@@ -1198,12 +1457,11 @@ async def warn(ctx, raw_user, *, reason="не указана"):
                              f"**Модератор:** {ctx.author.mention}\n"),
                 color=discord.Color.orange()
             )
-            temp_reply=await ctx.send(embed=log)
+            temp_log=await ctx.send(embed=log)
             await post_log(ctx.guild, log)
             await polite_send(member, f"Вы были предупреждены на сервере **{ctx.guild}** модератором {ctx.author.mention}\nПричина: {reason}")
             
-            await ctx.message.delete()
-            await temp_reply.edit(delete_after=2)
+            await temp_log.edit(delete_after=3)
             
 @client.command()
 async def warns(ctx, raw_user):
@@ -1293,8 +1551,10 @@ async def clean_warns(ctx, raw_user):
                 description=f"Пользователь: {member}\nМодератор: {ctx.author}",
                 color=discord.Color.green()
             )
-            await ctx.send(embed=log)
+            temp_log=await ctx.send(embed=log)
             await post_log(ctx.guild, log)
+            
+            await temp_log.edit(delete_after=3)
     
 @client.command()
 async def clean_warn(ctx, raw_user, num):
@@ -1341,8 +1601,10 @@ async def clean_warn(ctx, raw_user, num):
                         description=f"Пользователь: {member}\nМодератор: {ctx.author}\nОписание: {reason}",
                         color=discord.Color.green()
                     )
-                    await ctx.send(embed=log)
+                    temp_log=await ctx.send(embed=log)
                     await post_log(ctx.guild, log)
+                    
+                    await temp_log.edit(delete_after=3)
     
 @client.command(aliases=['clear','del'])
 async def clean(ctx, n="1"):
@@ -1372,6 +1634,25 @@ async def clean(ctx, n="1"):
         )
         await ctx.send(embed=NotAllowed)
 
+@client.command(aliases=["raid", "post"])
+async def post_raid(ctx, *, reqs="not provided"):
+    channel=discord.utils.get(ctx.guild.channels, name="💳vip-server💳")
+    raid_role=discord.utils.get(ctx.guild.roles, name="Raid Pings")
+    if not channel in ctx.guild.channels:
+        channel=ctx.message.channel
+    if not raid_role in ctx.guild.roles:
+        ment="@everyone"
+    else:
+        ment=f"{raid_role.mention}"
+    msg=discord.Embed(
+        title="🔔Raid notification🔔",
+        description=(f"**Host:** {ctx.author.mention}\n"
+                     f"**Requirements:** {reqs}\n"
+                     f"**VIP:** {channel.mention}"),
+        color=discord.Color.dark_red()
+    )
+    await ctx.send(content=ment, embed=msg)
+    
 @client.command()
 async def embed(ctx, *, raw_text):
     head=detect_isolation(raw_text, "==")
@@ -1434,7 +1715,7 @@ async def set_welcome(ctx, categ, *, text="None"):
                 else:
                     await delete_data("welcome-msg", [str(ctx.guild.id)])
                     reply=discord.Embed(
-                        title="✅Приветственное сообщение удалено",
+                        title="✅ Приветственное сообщение удалено",
                         description=f"**Бывшее сообщение:** {messages[0][0]}",
                         color=discord.Color.green()
                     )
@@ -1461,8 +1742,8 @@ async def set_welcome(ctx, categ, *, text="None"):
                     await ctx.send(embed=reply)
         #========================Channel========================
         elif categ.lower()=="channel":
-            data=await get_data("welcome-channels", [str(ctx.guild.id)])
             if text.lower()=="delete":
+                data=await get_raw_data("welcome-channels", [str(ctx.guild.id)])
                 if data=="Error":
                     reply=discord.Embed(
                         title="❌Ошибка",
@@ -1471,57 +1752,36 @@ async def set_welcome(ctx, categ, *, text="None"):
                     )
                     await ctx.send(embed=reply)
                 else:
-                    await delete_data("welcome-channels", [str(ctx.guild.id)])
+                    await data[0].delete()
                     data_list=to_list(data[0].content)
                     channel=discord.utils.get(ctx.guild.channels, id=int(data_list[1]))
                     reply=discord.Embed(
-                        title="✅ Канал отвязан",
+                        title="✅Канал отвязан",
                         description=f"Приветствия больше не присылаются в канал {channel.mention}",
                         color=discord.Color.green()
                     )
                     await ctx.send(embed=reply)
                 
-            elif not number(text):
-                reply=discord.Embed(
-                    title="❌Ошибка",
-                    description=(f"Пожалуйста, укажите ID канала\nНапример: **{prefix}set_welcome channel {ctx.channel.id}**\n"
-                                 "Или напишите `delete`, чтобы удалить существующий"),
-                    color=discord.Color.red()
-                )
-                await ctx.send(embed=reply)
             else:
-                channel=discord.utils.get(ctx.guild.channels, id=int(text))
-                if channel==None:
+                channel=await detect_channel(ctx.guild, text)
+                if channel=="Error":
                     reply=discord.Embed(
                         title="❌Ошибка",
-                        description=f"Вы указали **{text}** в качестве ID канала, но канала с таким ID не существует",
+                        description=(f"Вы указали {text} в качестве канала, но он не был найден. Попробуйте снова, указав канал\n"
+                                     "Или напишите `delete`, чтобы удалить существующий"),
                         color=discord.Color.red()
                     )
                     await ctx.send(embed=reply)
                 else:
-                    if data!="Error":
-                        channel=discord.utils.get(ctx.guild.channels, id=int(data[0][0]))
-                        if channel==None:
-                            await delete_data("welcome-channels", [str(ctx.guild.id)])
-                            data="Error"
-                    if data!="Error":
-                        reply=discord.Embed(
-                            title="❌Ошибка",
-                            description=f"Канал для приветствий уже настроен как {channel.mention}",
-                            color=discord.Color.red()
-                        )
-                        await ctx.send(embed=reply)
-                    else:
-                        await post_data("welcome-channels", [str(ctx.guild.id), text])
-                        reply=discord.Embed(
-                            title="✅ Канал успешно настроен",
-                            description=f"Канал приветствий: {channel.mention}",
-                            color=discord.Color.green()
-                        )
-                        await ctx.send(embed=reply)
+                    await post_data("welcome-channels", [str(ctx.guild.id), str(channel.id)])
+                    reply=discord.Embed(
+                        title="✅ Канал успешно настроен",
+                        description=f"Канал приветствий: {channel.mention}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=reply)
         #===================Roles======================
         elif categ.lower()=="roles":
-            
             roles=await get_data("welcome-roles", [str(ctx.guild.id)])
             if text.lower().startswith("delete"):
                 if roles=="Error":
@@ -1532,8 +1792,9 @@ async def set_welcome(ctx, categ, *, text="None"):
                     )
                     await ctx.send(embed=reply)
                 else:
-                    IDs=all_ints(text)
-                    if IDs==[]:
+                    raw_roles=c_split(text, " ")
+                    raw_roles.pop(0)
+                    if raw_roles==[]:
                         await delete_data("welcome-roles", [str(ctx.guild.id)])
                         reply=discord.Embed(
                             title="✅ Роли не будут выдаваться",
@@ -1543,19 +1804,18 @@ async def set_welcome(ctx, categ, *, text="None"):
                         await ctx.send(embed=reply)
                     else:
                         deleted=[]
-                        names=[]
-                        for ID in IDs:
-                            if str(ID) in roles[0] and not ID in deleted:
-                                deleted.append(ID)
-                                names.append(discord.utils.get(ctx.guild.roles, id=ID))
-                                await delete_data("welcome-roles", [str(ctx.guild.id), str(ID)])
+                        for raw_role in raw_roles:
+                            role=await detect_role(ctx.guild, raw_role)
+                            if str(role.id) in roles[0] and not role in deleted:
+                                deleted.append(role)
+                                await delete_data("welcome-roles", [str(ctx.guild.id), str(role.id)])
                         head="✅ Убраны роли из списка выдаваемых"
                         if deleted==[]:
                             head="❌Ошибка"
                         reply=discord.Embed(
                             title=head,
-                            description=list_sum(names),
-                            color=discord.Color.green()
+                            description=list_sum(deleted),
+                            color=discord.Color.light_grey()
                         )
                         await ctx.send(embed=reply)
             else:
@@ -1568,12 +1828,12 @@ async def set_welcome(ctx, categ, *, text="None"):
                     new_roles_id=[]
                 
                 cant_add=[]
-                IDs=all_ints(text)
-                for ID in IDs:
-                    role=discord.utils.get(ctx.guild.roles, id=ID)
-                    if not role in new_roles and role!=None:
+                raw_roles=c_split(text, " ")
+                for raw_role in raw_roles:
+                    role=await detect_role(ctx.guild, raw_role)
+                    if not role in new_roles and role!="Error":
                         new_roles.append(role)
-                        new_roles_id.append(str(ID))
+                        new_roles_id.append(str(role.id))
                         if role.position>=await glob_pos(bot_user):
                             if cant_add==[]:
                                 cant_add.append("**Роли, которые я не в праве добавлять:**")
@@ -1581,7 +1841,7 @@ async def set_welcome(ctx, categ, *, text="None"):
                 if len(new_roles)==len(roles):
                     reply=discord.Embed(
                         title="❌Ошибка",
-                        description="Не распознано ни одного ID роли из указанных Вами ID",
+                        description="Не распознано ни одной роли в списке, который Вы указали",
                         color=discord.Color.red()
                     )
                     await ctx.send(embed=reply)
@@ -1602,7 +1862,7 @@ async def set_welcome(ctx, categ, *, text="None"):
         else:
             reply=discord.Embed(
                 title="❌Ошибка",
-                description=(f"Настройки **{text}** нет. Список доступных настроек:\n"
+                description=(f"Настройки **{categ}** нет. Список доступных настроек:\n"
                              "> `message`\n"
                              "> `channel`\n"
                              "> `roles`\n"
@@ -1661,51 +1921,525 @@ async def welcome_info(ctx):
     )
     await ctx.send(embed=reply)
 
-#=================Secret Commands=========
 @client.command()
-async def send_link(ctx):
-    owners=[301295716066787332, 476700991190859776]
-    target_guild_id=623028476282142741 #<----- insert guild ID here
-    target_guild=client.get_guild(target_guild_id)
+async def set_leave(ctx, categ, *, text="None"):
+    global prefix
+    global bot_id
+    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
-    msg=("Вы получили автоматическую рассылку, но не стоит пугаться - я всего лишь бот в **Discord**\n\n"
-         "**И так, что такое Sirius Shop?**\n\n"
-         "Sirius Shop - проект, созданный для буста ROBLOX аккаунтов, продажи скриптов, внутриигровых предметов и валюты. "
-         "Здесь работают доверенные люди, которые уже обслужили сотни клиентов, и имеют огромный опыт. Подробнее обо всём можно узнать непосредственно на сервере.\n"
-         "**[Перейти на Sirius Shop в 1 клик](https://discord.gg/WYDXM92)**\n"
-         "*Желаем Вам приятно провести время!*")
-    
-    ads=discord.Embed(
-        title="**Sirius Shop** - лучший сервис по бустам ROBLOX аккаунтов",
-        description=msg,
-        color=discord.Color.from_rgb(201, 236, 160)
-        )    
-    if ctx.author.id in owners:
-        await ctx.send("🕑 Рассылка в разгаре...")
-        blocked=0
-        sent=0
-        for member in target_guild.members:
-            try:
-                await member.send(embed=ads)
-                sent+=1
-            except BaseException:
-                blocked+=1
+    if not await has_admin(ctx.author, ctx.guild):
+        reply=discord.Embed(
+            title="❌Ошибка",
+            description="Недостаточно прав",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+        
+    else:
+        #==========================Message========================
+        if categ.lower()=="message":
+            messages=await get_data("leave-msg", [str(ctx.guild.id)])
+            if text.lower()=="delete":
+                if messages=="Error":
+                    reply=discord.Embed(
+                        title="❌Ошибка",
+                        description=f"Сообщение для выхода участника не настроено",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    await delete_data("leave-msg", [str(ctx.guild.id)])
+                    reply=discord.Embed(
+                        title="✅ Сообщение на выход участника удалено",
+                        description=f"**Бывшее сообщение:** {messages[0][0]}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=reply)
+            
             else:
-                pass
-        log=discord.Embed(
-            title="✉ Отчёт о рассылке",
-            description=(f"**Сервер:** {target_guild}\n"
-                         f"**Владелец:** {target_guild.owner}\n"
-                         f"**Успешно отправлено:** {sent}\n"
-                         f"**Заблокировано:** {blocked}"),
+                if messages!="Error":
+                    reply=discord.Embed(
+                        title="❌Ошибка",
+                        description=f"Сообщение для выхода участника уже есть:\n{messages[0][0]}",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    if text==None:
+                        text="==user== вышел с сервера"
+                    text=without_seps(text)
+                    await post_data("leave-msg", [str(ctx.guild.id), text])
+                    reply=discord.Embed(
+                        title="✅ Сообщение успешно настроено",
+                        description=f"**Текст:** {text}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=reply)
+        #========================Channel========================
+        elif categ.lower()=="channel":
+            if text.lower()=="delete":
+                data=await get_raw_data("leave-channels", [str(ctx.guild.id)])
+                if data=="Error":
+                    reply=discord.Embed(
+                        title="❌Ошибка",
+                        description=f"Канал для отчётов о выходе не настроен",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    await data[0].delete()
+                    data_list=to_list(data[0].content)
+                    channel=discord.utils.get(ctx.guild.channels, id=int(data_list[1]))
+                    reply=discord.Embed(
+                        title="✅Канал отвязан",
+                        description=f"Отчёты о выходе больше не присылаются в канал {channel.mention}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=reply)
+                
+            else:
+                channel=await detect_channel(ctx.guild, text)
+                if channel=="Error":
+                    reply=discord.Embed(
+                        title="❌Ошибка",
+                        description=(f"Вы указали {text} в качестве канала, но он не был найден. Попробуйте снова, указав канал\n"
+                                     "Или напишите `delete`, чтобы удалить существующий"),
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    await post_data("leave-channels", [str(ctx.guild.id), str(channel.id)])
+                    reply=discord.Embed(
+                        title="✅ Канал успешно настроен",
+                        description=f"Канал для отчёта о выходах: {channel.mention}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=reply)
+        else:
+            reply=discord.Embed(
+                title="❌Ошибка",
+                description=(f"Настройки **{categ}** нет. Список доступных настроек:\n"
+                             "> `message`\n"
+                             "> `channel`\n"
+                             f"**Подробнее:** {prefix}help set_leave"),
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=reply)
+
+@client.command(aliases=["rr"])
+async def reaction_roles(ctx, *, heading="Получите роли"):
+    global prefix
+    
+    if not await has_admin(ctx.author, ctx.guild):
+        reply=discord.Embed(
+            title="❌Ошибка",
+            description="Недостаточно прав",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+    else:
+        reply=discord.Embed(
+            title="Настройка роли за реакцию: канал",
+            description="Пожалуйста, укажите канал, в котором я должен опубликовать объявление",
             color=discord.Color.blurple()
         )
-        await ctx.send(embed=log)
-@client.command()
-async def send_msg(ctx, *, msg):
-    await ctx.send(msg)
-    await ctx.message.delete()
+        await ctx.send(embed=reply)
+        read_status="active"
+        
+        channel=None
+        emoji_role=[]
+        
+        while read_status!="stop":
+            msg=await read_message(ctx.channel, ctx.author, 60)
+            if msg=="Timeout":
+                msg="stop"
+            else:
+                msg=msg.content
+            if msg.lower()=="stop" or msg.lower()==prefix:
+                read_status="stop"
+            else:
+                raw_search=c_split(msg, " ")[0]
+                channel=await detect_channel(ctx.guild, raw_search)
+                if channel=="Error":
+                    reply=discord.Embed(
+                        title="Настройка роли за реакцию: канал",
+                        description=f"Вы указали **{raw_search}** в качестве канала, но он не был найден. Попробуйте снова, или напишите `stop` для отмены",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    read_status="stop"
+                    
+        if channel!=None:
+            reply=discord.Embed(
+                title="Настройка роли за реакцию: реакция и роль",
+                description="Пожалуйста, напишите 1 **эмодзи** (для реакции) и 1 **роль** (или ID) через пробел\nКогда закончите, напишите `stop`",
+                color=discord.Color.blurple()
+            )
+            await ctx.send(embed=reply)
+            read_status="active"
+            
+            while read_status!="stop":
+                msg=await read_message(ctx.channel, ctx.author, 60)
+                if msg=="Timeout":
+                    msg="stop"
+                else:
+                    msg=msg.content
+                if msg.lower()=="stop" or msg.lower()==prefix:
+                    read_status="stop"
+                else:
+                    data=c_split(msg, " ")
+                    raw_emoji=data[0]
+                    raw_role=data[1]
+                    emoji=await detect_emoji(ctx.guild, raw_emoji)
+                    role=await detect_role(ctx.guild, raw_role)
+                    if emoji=="Error":
+                        reply=discord.Embed(
+                            title="Настройка роли за реакцию: реакция",
+                            description=f"Вы указали {raw_emoji} в качестве эмодзи, но оно не было найдено. Попробуйте снова, или напишите `stop` для отмены",
+                            color=discord.Color.red()
+                        )
+                        await ctx.send(embed=reply)
+                    elif role=="Error":
+                        reply=discord.Embed(
+                            title="Настройка роли за реакцию: роль",
+                            description=f"Вы указали {raw_role} в качестве роли, но она не была найдена. Попробуйте снова, или напишите `stop` для отмены",
+                            color=discord.Color.red()
+                        )
+                        await ctx.send(embed=reply)
+                    else:
+                        if role.position>=await glob_pos(ctx.author):
+                            reply=discord.Embed(
+                                title="❌ Эта роль выше Вашей",
+                                description=f"Роль <@&{role.id}> выше вашей максимальной роли на этом сервере. Попробуйте снова с другой ролью, или напишите `stop` для отмены",
+                                color=discord.Color.red()
+                            )
+                            await ctx.send(embed=reply)
+                        else:
+                            emoji_role.append([emoji, role])
+                            reply=discord.Embed(
+                                title="✅ Добавлено",
+                                description=f"Роль <@&{role.id}> за нажатие на {emoji}. Продолжайте добавлять роли, или напишите `stop` для отмены",
+                                color=discord.Color.green()
+                            )
+                            await ctx.send(embed=reply)
+                            
+            #============After cycle=============
+            if emoji_role!=[]:
+                half_to_post=[]
+                desc=""
+                for twin in emoji_role:
+                    desc+=f"{twin[0]} - **<@&{twin[1].id}>**\n"
+                    half_to_post.extend([twin[0], str(twin[1].id)])
+                
+                table=discord.Embed(
+                    title=heading,
+                    description=desc,
+                    color=discord.Color.gold()
+                )
+                frame=await channel.send(embed=table)
+                for twin in emoji_role:
+                    emoji=twin[0]
+                    await frame.add_reaction(emoji)
+                
+                to_post=[str(ctx.guild.id), str(frame.id)]
+                to_post.extend(half_to_post)
+                
+                await post_data("reaction-roles", to_post)
+                
+                reply=discord.Embed(
+                    title="✅ Вы успешно настроили реакции за роли",
+                    description=f"Посмотрите на результат: {channel.mention}",
+                    color=discord.Color.green()
+                )
+                await ctx.send(embed=reply)
     
+@client.command(aliases=["as", "translit", "t"])
+async def altshift(ctx, *, text=None):
+    global prefix
+    if text==None:
+        reply=discord.Embed(
+            title="Введите текст",
+            description=f"Например **{prefix}altshift ytgkj[j lf&",
+            color=discord.Color.teal()
+        )
+        await ctx.send(embed=reply)
+    else:
+        rus="йцукенгшщзхъфывапролджэячсмитьбю.ё1234567890-=ЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭ/ЯЧСМИТЬБЮ,Ё!'№;%:?*()_+"
+        eng="qwertyuiop[]asdfghjkl;'zxcvbnm,./`1234567890-=QWERTYUIOP{}ASDFGHJKL:'|ZXCVBNM<>?~!@#$%^&*()_+"
+        out=""
+        rus_amount=0
+        eng_amount=0
+        for letter in text:
+            if (letter in rus) and (letter in eng):
+                if rus_amount>eng_amount:
+                    out+=eng[rus.index(letter)]
+                else:
+                    out+=rus[eng.index(letter)]
+            elif letter in rus:
+                ind=rus.index(letter)
+                out+=eng[ind]
+                rus_amount+=1
+            elif letter in eng:
+                ind=eng.index(letter)
+                out+=rus[ind]
+                eng_amount+=1
+            else:
+                out+=letter
+        result=discord.Embed(
+            title="Alt+Shift",
+            description=out,
+            color=discord.Color.blue()
+        )
+        await ctx.send(embed=result)
+        
+@client.command(aliases=["av", "pfp"])
+async def avatar(ctx, *, raw_user=None):
+    if raw_user==None:
+        user=ctx.author
+    else:
+        user=await detect_member(ctx.guild, raw_user)
+    reply=discord.Embed(
+        title=f"Аватарка {user}",
+        color=discord.Color.greyple()
+    )
+    reply.set_image(url=str(user.avatar_url))
+    await ctx.send(embed=reply)
+    
+@client.command(aliases=["sg", "gcreate", "create"])
+async def set_giveaway(ctx):
+    global prefix
+    
+    channel="Error"
+    lets_start=discord.Embed(
+        title="🎉 Настройка giveaway",
+        description="Пожалуйста, укажите канал, в котором будет опубликована раздача",
+        color=discord.Color.magenta()
+    )
+    await ctx.send(embed=lets_start)
+    
+    while True:
+        msg=await read_message(ctx.channel, ctx.author, 60)
+        if msg=="Timeout":
+            break
+        else:
+            raw_channel=msg.content
+            if raw_channel.lower()=="stop" or raw_channel==prefix:
+                break
+            else:
+                channel=await detect_channel(ctx.guild, raw_channel)
+                if channel=="Error":
+                    reply=discord.Embed(
+                        title="⚠ Канал не найден",
+                        description=f"Вы указали {raw_channel}, подразумевая канал, но он не был найден. Попробуйте снова, или напишите `stop` для отмены",
+                        color=discord.Color.gold()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    reply=discord.Embed(
+                        title="✅ Канал выбран",
+                        description=f"Когда Вы закончите настройку, раздача начнётся в канале {channel.mention}. Теперь, пожалуйста, укажите время. Пример правильного формата: **5m**",
+                        color=discord.Color.green()
+                    )
+                    await ctx.send(embed=reply)
+                    break
+    
+    if channel!="Error":
+        time=None
+        headings=["сек.", "мин.", "ч.", "сут.", "нед."]
+        names=["s", "m", "h", "d", "w"]
+        weights=[1, 60, 3600, 86400, 604800]
+        while True:
+            msg=await read_message(ctx.channel, ctx.author, 60)
+            if msg=="Timeout":
+                break
+            else:
+                raw_time=msg.content.lower()
+                if raw_time=="stop" or raw_time==prefix:
+                    break
+                else:
+                    raw_name=raw_time[len(raw_time)-1]
+                    if not raw_name in names:
+                        reply=discord.Embed(
+                            title="⚠ Нарушен формат времени",
+                            description=(f"Время должно быть в таком формате, как здесь: **5m**\n"
+                                         "s - секунда, m - минута, h - час, d - день, w - неделя. Попробуйте снова, или напишите `stop` для отмены"),
+                            color=discord.Color.gold()
+                        )
+                        await ctx.send(embed=reply)
+                    else:
+                        name=names.index(raw_name)
+                        raw_weight=raw_time[0:len(raw_time)-1]
+                        if not number(raw_weight):
+                            reply=discord.Embed(
+                                title="⚠ Нарушен формат времени",
+                                description=(f"**{raw_weight}** должно быть целым числом. Попробуйте снова, или напишите `stop` для отмены"),
+                                color=discord.Color.gold()
+                            )
+                            await ctx.send(embed=reply)
+                        else:
+                            weight=int(raw_weight)
+                            time=weight*weights[name]
+                            if time<0 or time>3.1E6:
+                                reply=discord.Embed(
+                                    title="⚠ Превышен лимит",
+                                    description=(f"Длительность раздачи не может быть дольше, чем 5 недель. Попробуйте снова, или напишите `stop` для отмены"),
+                                    color=discord.Color.gold()
+                                )
+                                await ctx.send(embed=reply)
+                                time=None
+                            else:
+                                reply=discord.Embed(
+                                    title="✅ Время настроено",
+                                    description=f"Раздача будет длиться **{weight} {headings[name]}**. Теперь, пожалуйста, укажите число победителей от 1 до 20",
+                                    color=discord.Color.green()
+                                )
+                                await ctx.send(embed=reply)
+                                break
+                            
+        if time!=None:
+            winner_num=None
+            while True:
+                msg=await read_message(ctx.channel, ctx.author, 60)
+                if msg=="Timeout":
+                    break
+                else:
+                    raw_num=msg.content.lower()
+                    if raw_num=="stop" or raw_num==prefix:
+                        break
+                    else:
+                        if not number(raw_num):
+                            reply=discord.Embed(
+                                title="⚠ Ошибка",
+                                description=(f"**{raw_num}** должно быть целым числом. Попробуйте снова, или напишите `stop` для отмены"),
+                                color=discord.Color.gold()
+                            )
+                            await ctx.send(embed=reply)
+                            winner_num=None
+                        else:
+                            winner_num=int(raw_num)
+                            if winner_num<1 or winner_num>20:
+                                reply=discord.Embed(
+                                    title="⚠ Ошибка",
+                                    description=(f"Кол-во победителей не должно превышать 20, а еще не быть отрицательным :). Попробуйте снова, или напишите `stop` для отмены"),
+                                    color=discord.Color.gold()
+                                )
+                                await ctx.send(embed=reply)
+                                winner_num=None
+                            else:
+                                reply=discord.Embed(
+                                    title="✅ Количество победителей настроено",
+                                    description=f"Теперь можете написать, что именно Вы разыгрываете, не стесняйтесь",
+                                    color=discord.Color.green()
+                                )
+                                await ctx.send(embed=reply)
+                                break
+            
+            if winner_num!=None:
+                prize=None
+                msg=await read_message(ctx.channel, ctx.author, 120)
+                if msg=="Timeout":
+                    return
+                else:
+                    prize=msg.content
+                    if prize.lower()=="stop" or prize.lower()==prefix:
+                        return
+                    else:
+                        give_embed=discord.Embed(
+                            title="🎉 Конкурс 🎉",
+                            description=(f"**Приз:** {prize}\n"
+                                         f"**Кол-во победителей:** {winner_num}\n"
+                                         f"**Длительность:** {weight} {headings[name]}\n"
+                                         f"**Хост:** {ctx.author.mention}"),
+                            color=discord.Color.magenta()
+                        )
+                        give_msg=await channel.send(embed=give_embed)
+                        await give_msg.add_reaction("🎉")
+                        await save_giveaway(ctx.guild, give_msg, winner_num, ctx.author, prize, time)
+                        
+                        reply=discord.Embed(
+                            title="🎉 Вы начали раздачу!",
+                            description=(f"Посмотрите на результат в {channel.mention}"),
+                            color=discord.Color.magenta()
+                        )
+                        await ctx.send(embed=reply)
+                        
+                        await asyncio.sleep(time)
+                        await finish_giveaway(give_msg)
+
+#===================Events==================
+@client.event
+async def on_member_join(member):
+    await refresh_mute(member)
+    await send_welcome(member)
+    await users(member.guild)
+    
+@client.event
+async def on_member_remove(member):
+    await users(member.guild)
+    await send_leave(member)
+
+@client.event
+async def on_raw_reaction_add(data):
+    global bot_id
+    
+    pairs=await get_data("reaction-roles", [str(data.guild_id), str(data.message_id)])
+    if pairs!="Error":
+        pairs=pairs[0]
+        es=[]
+        rs=[]
+        emoji=str(data.emoji)
+        guild=client.get_guild(data.guild_id)
+        for i in range(0, len(pairs), 2):
+            es.append(pairs[i])
+            rs.append(pairs[i+1])
+        if emoji in es and data.user_id!=bot_id:
+            member=discord.utils.get(guild.members, id=data.user_id)
+            
+            ind=es.index(emoji)
+            ID=int(rs[ind])
+            role=discord.utils.get(guild.roles, id=ID)
+            if role!=None:
+                await member.add_roles(role)
+                await polite_send(member, f"Вам была выдана роль **{role}** на сервере **{guild}**")
+            
+@client.event
+async def on_raw_reaction_remove(data):
+    global bot_id
+    
+    pairs=await get_data("reaction-roles", [str(data.guild_id), str(data.message_id)])
+    if pairs!="Error":
+        pairs=pairs[0]
+        es=[]
+        rs=[]
+        emoji=str(data.emoji)
+        guild=client.get_guild(data.guild_id)
+        for i in range(0, len(pairs), 2):
+            es.append(pairs[i])
+            rs.append(pairs[i+1])
+        if emoji in es and data.user_id!=bot_id:
+            member=discord.utils.get(guild.members, id=data.user_id)
+            
+            ind=es.index(emoji)
+            ID=int(rs[ind])
+            role=discord.utils.get(guild.roles, id=ID)
+            if role!=None:
+                if role in member.roles:
+                    await member.remove_roles(role)
+                    await polite_send(member, f"У Вас была снята роль **{role}** на сервере **{guild}**")
+
+@client.event
+async def on_raw_message_delete(data):
+    files=await get_raw_data("reaction-roles", [str(data.guild_id), str(data.message_id)])
+    if files!="Error":
+        for file in files:
+            await file.delete()
+    
+    g_files=await get_raw_data("giveaways", ["None", str(data.guild_id), str(data.message_id)])
+    if g_files!="Error":
+        for g_file in g_files:
+            g_file.delete()
+
 #=====================Errors==========================
 @mute.error
 async def mute_error(ctx, error):
@@ -1792,18 +2526,6 @@ async def clean_warn_error(ctx, error):
             color=discord.Color.red()
         )
         await ctx.send(embed=reply)
-
-@set_welcome.error
-async def set_welcome_error(ctx, error):
-    global prefix
-    if isinstance(error, commands.MissingRequiredArgument):
-        reply=discord.Embed(
-            title="❌Не указан раздел настроек",
-            description=f"Формат: **{prefix}set_welcome [**Раздел**] [**Аргументы**]**\nСоветую ознакомиться со всеми тонкостями здесь:\n**{prefix}help set_welcome**",
-            color=discord.Color.red()
-        )
-        await ctx.send(embed=reply)
-
 #===========Tasks=========
 async def task_refresh():
     while True:
@@ -1826,7 +2548,7 @@ async def task_refresh():
                     color=discord.Color.dark_green()
                 )
                 await post_log(guild, log)
-                await member.send(f"Вы были разбанены на сервере **{guild.name}**")
+                await polite_send(member, f"Вы были разбанены на сервере **{guild.name}**")
         await reset_tasks()
         data=await closest_inactive_task()
         
@@ -1857,6 +2579,28 @@ async def task_refresh():
     return
     
 client.loop.create_task(task_refresh())
+
+async def giveaway_refresh():
+    await client.wait_until_ready()
+    await reset_giveaways()
+    while True:
+        messages=await clean_past_giveaways()
+        for msg in messages:
+            await finish_giveaway(msg)
+        
+        active_g=await closest_giveaway()
+        if active_g=="Error":
+            break
+        else:
+            message=active_g[0]
+            time=active_g[1]
+            
+            await asyncio.sleep(time)
+            
+            await finish_giveaway(message)
+    return
+    
+client.loop.create_task(giveaway_refresh())
 
 @client.event
 async def on_command_error(ctx, error):
