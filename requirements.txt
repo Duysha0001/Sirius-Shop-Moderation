@@ -1,4 +1,5 @@
 discord
 asyncio
+emoji
 Pymoe
 pip
