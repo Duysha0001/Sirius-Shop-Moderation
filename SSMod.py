@@ -319,6 +319,61 @@ def spamm(guild, user, message):
                 message_buffer[f"{guild.id}"][f"{user.id}"][categ]["sent"]-=1
             return [False]
 
+def get_user(text):
+    IDs=all_ints(text)
+    if IDs==[]:
+        ID=None
+    else:
+        ID=IDs[0]
+        print(ID)
+    user=None
+    if ID!=None:
+        user=client.get_user(ID)
+    return user
+
+def has_helper(user, guild):
+    mmcheck=False
+    if guild.owner.id==user.id:
+        mmcheck=True
+    for r in user.roles:
+        if r.permissions.administrator or r.permissions.manage_messages:
+            mmcheck=True
+    return mmcheck
+
+def has_admin(user, guild):
+    mmcheck=False
+    if guild.owner.id==user.id:
+        mmcheck=True
+    for r in user.roles:
+        if r.permissions.administrator:
+            mmcheck=True
+    return mmcheck
+
+def can_kick(user, guild):
+    mmcheck=False
+    if guild.owner.id==user.id:
+        mmcheck=True
+    for r in user.roles:
+        if r.permissions.administrator or r.permissions.kick_members:
+            mmcheck=True
+    return mmcheck
+
+def can_ban(user, guild):
+    mmcheck=False
+    if guild.owner.id==user.id:
+        mmcheck=True
+    for r in user.roles:
+        if r.permissions.administrator or r.permissions.ban_members:
+            mmcheck=True
+    return mmcheck
+
+def glob_pos(user):
+    pos=0
+    for r in user.roles:
+        if r.position>pos:
+            pos=r.position
+    return pos
+
 #========Database Minor tools=======
 def to_raw(data_list):
     out=""
@@ -515,49 +570,6 @@ async def users(server):
         await channel.purge(limit=1)
         await channel.send(embed=stats)
 
-async def has_helper(user, guild):
-    mmcheck=False
-    if guild.owner.id==user.id:
-        mmcheck=True
-    for r in user.roles:
-        if r.permissions.administrator or r.permissions.manage_messages:
-            mmcheck=True
-    return mmcheck
-
-async def has_admin(user, guild):
-    mmcheck=False
-    if guild.owner.id==user.id:
-        mmcheck=True
-    for r in user.roles:
-        if r.permissions.administrator:
-            mmcheck=True
-    return mmcheck
-
-async def can_kick(user, guild):
-    mmcheck=False
-    if guild.owner.id==user.id:
-        mmcheck=True
-    for r in user.roles:
-        if r.permissions.administrator or r.permissions.kick_members:
-            mmcheck=True
-    return mmcheck
-
-async def can_ban(user, guild):
-    mmcheck=False
-    if guild.owner.id==user.id:
-        mmcheck=True
-    for r in user.roles:
-        if r.permissions.administrator or r.permissions.ban_members:
-            mmcheck=True
-    return mmcheck
-
-async def glob_pos(user):
-    pos=0
-    for r in user.roles:
-        if r.position>pos:
-            pos=r.position
-    return pos
-
 async def post_log(guild, log_embed):
     log_channels=await get_data("log-channels", [str(guild.id)])
     if not log_channels=="Error":
@@ -693,7 +705,7 @@ async def recharge(case):
         if not Mute in guild.roles:
             await setup_mute(guild)
             Mute = discord.utils.get(guild.roles, name=mute_role_name)
-        if await glob_pos(bot_user)>await glob_pos(member):
+        if glob_pos(bot_user) > glob_pos(member):
             await member.remove_roles(Mute)
         
     elif mode=="ban":
@@ -769,7 +781,7 @@ async def send_welcome(member):
     if roles!="Error":
         for str_ID in roles[0]:
             role=discord.utils.get(member.guild.roles, id=int(str_ID))
-            if role!=None and role.position<await glob_pos(bot_user):
+            if role!=None and role.position < glob_pos(bot_user):
                 await member.add_roles(role)
 
 async def send_leave(member):
@@ -1379,7 +1391,7 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
             await setup_mute(ctx.guild)
             Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
         
-        if not await has_helper(ctx.author, ctx.guild):
+        if not has_helper(ctx.author, ctx.guild):
             reply=discord.Embed(
                 title="❌Недостаточно прав",
                 color=discord.Color.red()
@@ -1414,7 +1426,7 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                     if time>86400*7:
                         await ctx.send("Мут не может быть осуществлён больше, чем на неделю")
                     else:
-                        if await glob_pos(member)>=await glob_pos(bot_user):
+                        if glob_pos(member) >= glob_pos(bot_user):
                             reply=discord.Embed(
                                 title="⚠Ошибка",
                                 description=(f"Моя роль не выше роли пользователя {member}\n"
@@ -1464,7 +1476,7 @@ async def unmute(ctx, raw_user):
             await setup_mute(ctx.guild)
             Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
         
-        if not await has_helper(ctx.author, ctx.guild):
+        if not has_helper(ctx.author, ctx.guild):
             reply=discord.Embed(
                 title="❌Недостаточно прав",
                 color=discord.Color.red()
@@ -1479,7 +1491,7 @@ async def unmute(ctx, raw_user):
                 )
                 await ctx.send(embed=log)
             else:
-                if await glob_pos(member)>=await glob_pos(bot_user):
+                if glob_pos(member) >= glob_pos(bot_user):
                     reply=discord.Embed(
                         title="⚠Ошибка",
                         description=(f"Моя роль не выше роли пользователя {member}\n"
@@ -1522,7 +1534,7 @@ async def kick(ctx, raw_user, *, reason="не указана"):
     global bot_id
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
-    if not await can_kick(ctx.author, ctx.guild):
+    if not can_kick(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Недостаточно прав",
             color=discord.Color.red()
@@ -1539,7 +1551,7 @@ async def kick(ctx, raw_user, *, reason="не указана"):
             await ctx.send(embed=reply)
         
         else:
-            if await glob_pos(ctx.author) <= await glob_pos(member):
+            if glob_pos(ctx.author) <= glob_pos(member):
                 reply=discord.Embed(
                     title="❌Недостаточно прав",
                     description=f"Вы не можете кикнуть **{member.name}**, его роль не ниже Вашей",
@@ -1547,7 +1559,7 @@ async def kick(ctx, raw_user, *, reason="не указана"):
                 )
                 await ctx.send(embed=reply)
             else:
-                if await glob_pos(member)>=await glob_pos(bot_user):
+                if glob_pos(member) >= glob_pos(bot_user):
                     reply=discord.Embed(
                         title="⚠Ошибка",
                         description=(f"Моя роль не выше роли пользователя {member}\n"
@@ -1574,15 +1586,15 @@ async def ban(ctx, raw_user, *, reason="не указана"):
     global bot_id
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
-    if not await can_ban(ctx.author, ctx.guild):
+    if not can_ban(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Недостаточно прав",
             color=discord.Color.red()
         )
         await ctx.send(embed=reply)
     else:
-        member=await detect_member(ctx.guild, raw_user)
-        if member=="Error":
+        member = get_user(raw_user)
+        if member==None:
             reply=discord.Embed(
                 title="❌Пользователь не найден",
                 description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
@@ -1591,7 +1603,7 @@ async def ban(ctx, raw_user, *, reason="не указана"):
             await ctx.send(embed=reply)
             
         else:
-            if await glob_pos(ctx.author) <= await glob_pos(member):
+            if glob_pos(ctx.author) <= glob_pos(member):
                 reply=discord.Embed(
                     title="❌Недостаточно прав",
                     description=f"Вы не можете забанить **{member.name}**, его роль не ниже Вашей",
@@ -1599,7 +1611,7 @@ async def ban(ctx, raw_user, *, reason="не указана"):
                 )
                 await ctx.send(embed=reply)
             else:
-                if await glob_pos(member)>=await glob_pos(bot_user):
+                if glob_pos(member) >= glob_pos(bot_user):
                     reply=discord.Embed(
                         title="⚠Ошибка",
                         description=(f"Моя роль не выше роли пользователя {member}\n"
@@ -1622,7 +1634,7 @@ async def ban(ctx, raw_user, *, reason="не указана"):
 
 @client.command()
 async def unban(ctx, *, member=None):
-    if not await can_ban(ctx.author, ctx.guild):
+    if not can_ban(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Недостаточно прав",
             color=discord.Color.red()
@@ -1637,11 +1649,12 @@ async def unban(ctx, *, member=None):
             )
             await ctx.send(embed=reply)
         else:
+            to_unban = get_user(member)
             unbanned=None
             banned_users=await ctx.guild.bans()
             for ban_entry in banned_users:
                 user=ban_entry.user
-                if str(user.id)==member or f"{user.name}#{user.discriminator}"==member:
+                if user.id == to_unban.id:
                     unbanned=user
                     break
             if unbanned==None:
@@ -1668,17 +1681,17 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
     global bot_id
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
-    member=await detect_member(ctx.guild, raw_user)
-    if member=="Error":
+    member = get_user(raw_user)
+    if member==None:
         reply=discord.Embed(
             title="❌Пользователь не найден",
-            description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
+            description=f"Вы ввели **{raw_user}** подразумевая пользователя, но он не был найден",
             color=discord.Color.red()
             )
         await ctx.send(embed=reply)
         
     else:  
-        if not await can_ban(ctx.author, ctx.guild):
+        if not can_ban(ctx.author, ctx.guild):
             reply=discord.Embed(
                 title="❌Недостаточно прав",
                 color=discord.Color.red()
@@ -1713,7 +1726,7 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
                     if time>604800*7:
                         await ctx.send("Бан не может быть осуществлён больше, чем на 7 недель")
                     else:
-                        if await glob_pos(member)>=await glob_pos(bot_user):
+                        if glob_pos(member) >= glob_pos(bot_user):
                             reply=discord.Embed(
                                 title="⚠Ошибка",
                                 description=(f"Моя роль не выше роли пользователя {member}\n"
@@ -1808,7 +1821,7 @@ async def search(ctx, raw_request):
     
 @client.command()
 async def warn(ctx, raw_user, *, reason="не указана"):
-    if not await has_helper(ctx.author, ctx.guild):
+    if not has_helper(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Недостаточно прав",
             color=discord.Color.red()
@@ -1906,7 +1919,7 @@ async def server_warns(ctx):
     
 @client.command()
 async def clean_warns(ctx, raw_user):
-    if not await can_ban(ctx.author, ctx.guild):
+    if not can_ban(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Недостаточно прав",
             color=discord.Color.red()
@@ -1935,7 +1948,7 @@ async def clean_warns(ctx, raw_user):
     
 @client.command()
 async def clean_warn(ctx, raw_user, num):
-    if not await can_ban(ctx.author, ctx.guild):
+    if not can_ban(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Недостаточно прав",
             color=discord.Color.red()
@@ -1985,7 +1998,7 @@ async def clean_warn(ctx, raw_user, num):
     
 @client.command(aliases=['clear','del'])
 async def clean(ctx, n="1"):
-    if await has_helper(ctx.author, ctx.guild):
+    if has_helper(ctx.author, ctx.guild):
         if not number(n):
             reply=discord.Embed(
                 title='❌Неверно введено кол-во сообщений',
@@ -2078,7 +2091,7 @@ async def set_welcome(ctx, categ, *, text="None"):
     global bot_id
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
-    if not await has_admin(ctx.author, ctx.guild):
+    if not has_admin(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Ошибка",
             description="Недостаточно прав",
@@ -2220,7 +2233,7 @@ async def set_welcome(ctx, categ, *, text="None"):
                     if not role in new_roles and role!="Error":
                         new_roles.append(role)
                         new_roles_id.append(str(role.id))
-                        if role.position>=await glob_pos(bot_user):
+                        if role.position >= glob_pos(bot_user):
                             if cant_add==[]:
                                 cant_add.append("**Роли, которые я не в праве добавлять:**")
                             cant_add.append(f"> {role.name}; **ID:** {role.id}")
@@ -2276,7 +2289,7 @@ async def welcome_info(ctx):
                 await delete_data("welcome-roles", [str(ctx.guild.id), str_ID[0]])
             else:
                 role_list.append(f"1) **{role.name}**")
-                if role.position>=await glob_pos(bot_user):
+                if role.position >= glob_pos(bot_user):
                     cant_add.append(f"> {role.name}")
         if len(cant_add)<2:
             cant_add=[]
@@ -2313,7 +2326,7 @@ async def set_leave(ctx, categ, *, text="None"):
     global bot_id
     bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
     
-    if not await has_admin(ctx.author, ctx.guild):
+    if not has_admin(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Ошибка",
             description="Недостаточно прав",
@@ -2416,7 +2429,7 @@ async def set_leave(ctx, categ, *, text="None"):
 async def reaction_roles(ctx, *, heading="Получите роли"):
     global prefix
     
-    if not await has_admin(ctx.author, ctx.guild):
+    if not has_admin(ctx.author, ctx.guild):
         reply=discord.Embed(
             title="❌Ошибка",
             description="Недостаточно прав",
@@ -2494,7 +2507,7 @@ async def reaction_roles(ctx, *, heading="Получите роли"):
                         )
                         await ctx.send(embed=reply)
                     else:
-                        if role.position>=await glob_pos(ctx.author):
+                        if role.position >= glob_pos(ctx.author):
                             reply=discord.Embed(
                                 title="❌ Эта роль выше Вашей",
                                 description=f"Роль <@&{role.id}> выше вашей максимальной роли на этом сервере. Попробуйте снова с другой ролью, или напишите `stop` для отмены",
