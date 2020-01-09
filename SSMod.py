@@ -7,7 +7,7 @@ import os
 from emoji import UNICODE_EMOJI
 import random
 
-prefix="'"
+prefix=".."
 client=commands.Bot(command_prefix=prefix)
 bot_id=583016361677160459
 db_id=653160213607612426
@@ -235,24 +235,28 @@ def gem_url(level): #new
     ]
     return urls[level-1]
 
-def spamm(guild, user, text):
+def spamm(guild, user, message):
     global message_buffer
     
+    text=message.content
     now=datetime.datetime.now()
     weight=len(text)
     
     new_user={
             "dust": {
                 "sent": 0,
-                "last_at": None
+                "last_at": None,
+                "messages": []
                 },
             "blocks": {
                 "sent": 0,
                 "last_at": None,
+                "messages": []         
                 },
             "other": {
                 "sent": 0,
-                "last_at": None
+                "last_at": None,
+                "messages": []
                 }
         }
     
@@ -280,13 +284,14 @@ def spamm(guild, user, text):
         
     new_user[categ]["sent"]+=1
     new_user[categ]["ticks"]=now
+    new_user[categ]["messages"].append({"id": message.id, "channel_id": message.channel.id})
     
     if not f"{guild.id}" in message_buffer:
         message_buffer.update([(f"{guild.id}", {f"{user.id}": new_user})])
-        return False
+        return [False]
     elif not f"{user.id}" in message_buffer[f"{guild.id}"]:
         message_buffer[f"{guild.id}"].update([(f"{user.id}", new_user)])
-        return False
+        return [False]
     else:
         
         spam=message_buffer[f"{guild.id}"][f"{user.id}"][categ]
@@ -297,17 +302,22 @@ def spamm(guild, user, text):
         delta = now-last_tick
         
         message_buffer[f"{guild.id}"][f"{user.id}"][categ]["last_at"]=now
+        message_buffer[f"{guild.id}"][f"{user.id}"][categ]["messages"].append({"id": message.id, "channel_id": message.channel.id})
             
         if delta.seconds <= categs[categ]["timelim"]:
             if spam["sent"]>=categs[categ]["numlim"]:
-                return True
+                message_buffer[f"{guild.id}"][f"{user.id}"][categ]["sent"]=1
+                to_delete=message_buffer[f"{guild.id}"][f"{user.id}"][categ]["messages"]
+                message_buffer[f"{guild.id}"][f"{user.id}"][categ]["messages"]=[{"id": message.id, "channel_id": message.channel.id}]
+                return [True, to_delete]
+            
             else:
                 message_buffer[f"{guild.id}"][f"{user.id}"][categ]["sent"]+=1
-                return False
+                return [False]
         else:
             if spam["sent"]>1:
                 message_buffer[f"{guild.id}"][f"{user.id}"][categ]["sent"]-=1
-            return False
+            return [False]
 
 #========Database Minor tools=======
 def to_raw(data_list):
@@ -3277,9 +3287,19 @@ async def on_message(message):
     await client.process_commands(message)
     
     if not message.author.bot:
-        if spamm(message.guild, message.author, message.content) and not await has_admin(message.author, message.guild):
-            await message.delete()
+        
+        res=spamm(message.guild, message.author, message)
+    
+        if res[0]:
             await do_mute(message.guild, message.author, client.user, 3600, "спам")
+            
+            messages=res[1]
+            for message in messages:
+                msg_id=message["id"]
+                channel_id=message["channel_id"]
+                message=await detect_message(channel_id, msg_id)
+                if message!="Error":
+                    await message.delete()
         
         spammed=False
         
