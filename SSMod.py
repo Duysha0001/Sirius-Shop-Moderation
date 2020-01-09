@@ -13,7 +13,8 @@ bot_id=583016361677160459
 db_id=653160213607612426
 
 users_timers={"small": {}, "big": {}}
-max_level=10
+message_buffer={}
+max_level=12
 
 mute_role_name="Мут"
 
@@ -228,9 +229,85 @@ def gem_url(level): #new
     "https://cdn.discordapp.com/attachments/659911665386651671/664217234775998464/Gem_level_7.png",
     "https://cdn.discordapp.com/attachments/659911665386651671/664217262827241522/Gem_level_8.png",
     "https://cdn.discordapp.com/attachments/659911665386651671/664217306431488060/Gem_level_9.png",
-    "https://cdn.discordapp.com/attachments/659911665386651671/664217343005556767/Gem_level_10.png"
+    "https://cdn.discordapp.com/attachments/659911665386651671/664217343005556767/Gem_level_10.png",
+    "https://cdn.discordapp.com/attachments/659911665386651671/664566679329570827/Gem_level_11.png",
+    "https://cdn.discordapp.com/attachments/659911665386651671/664632522449354774/Gem_level_12.png"
     ]
     return urls[level-1]
+
+def spamm(guild, user, text):
+    global message_buffer
+    
+    now=datetime.datetime.now()
+    weight=len(text)
+    
+    new_user={
+            "dust": {
+                "sent": 0,
+                "last_at": None
+                },
+            "blocks": {
+                "sent": 0,
+                "last_at": None,
+                },
+            "other": {
+                "sent": 0,
+                "last_at": None
+                }
+        }
+    
+    categs={
+        "dust": {
+            "timelim": 1,
+            "numlim": 7
+            },
+        "blocks": {
+            "timelim": 10,
+            "numlim": 4
+            },
+        "other": {
+            "timelim": 1,
+            "numlim": 10
+            }
+    }
+    
+    if weight>500:
+        categ="blocks"
+    elif weight<7:
+        categ="dust"
+    else:
+        categ="other"
+        
+    new_user[categ]["sent"]+=1
+    new_user[categ]["ticks"]=now
+    
+    if not f"{guild.id}" in message_buffer:
+        message_buffer.update([(f"{guild.id}", {f"{user.id}": new_user})])
+        return False
+    elif not f"{user.id}" in message_buffer[f"{guild.id}"]:
+        message_buffer[f"{guild.id}"].update([(f"{user.id}", new_user)])
+        return False
+    else:
+        
+        spam=message_buffer[f"{guild.id}"][f"{user.id}"][categ]
+        
+        last_tick=spam["last_at"]
+        if last_tick==None:
+            last_tick=now
+        delta = now-last_tick
+        
+        message_buffer[f"{guild.id}"][f"{user.id}"][categ]["last_at"]=now
+            
+        if delta.seconds <= categs[categ]["timelim"]:
+            if spam["sent"]>=categs[categ]["numlim"]:
+                return True
+            else:
+                message_buffer[f"{guild.id}"][f"{user.id}"][categ]["sent"]+=1
+                return False
+        else:
+            if spam["sent"]>1:
+                message_buffer[f"{guild.id}"][f"{user.id}"][categ]["sent"]-=1
+            return False
 
 #========Database Minor tools=======
 def to_raw(data_list):
@@ -1041,6 +1118,44 @@ async def upd_timer(message, key_1):
                 users_timers[key_1][user_guild].pop(user)
                 return [False, False]
 
+async def do_mute(guild, member, moderator, sec, reason):
+    global mute_role_name
+    
+    Mute = discord.utils.get(guild.roles, name=mute_role_name)
+    if Mute==None:
+        await setup_mute(guild)
+        Mute = discord.utils.get(guild.roles, name=mute_role_name)    
+    await member.add_roles(Mute)
+    await save_task("mute", guild, member, sec)
+    
+    visual_time=delta_to_words(datetime.timedelta(seconds=sec))
+    
+    log=discord.Embed(
+        title=':lock: Пользователь заблокирован',
+        description=(f"**{member.mention}** был заблокирован на **{visual_time}**\n"
+                     f"Мут наложен пользователем {moderator.mention}\n"
+                     f"**Причина:** {reason}"),
+        color=discord.Color.darker_grey()
+    )
+    await post_log(guild, log)
+    await polite_send(member, f"Вам ограничили отправку сообщений на сервере **{guild.name}** на **{visual_time}**\nПричина: {reason}")
+    
+    await asyncio.sleep(sec)
+    
+    case=await delete_task("mute", guild, member)
+    if Mute in member.roles:
+        
+        await recharge(case)
+        
+        log=discord.Embed(
+            title=':key: Пользователь разблокирован',
+            description=(f"**{member.mention}** был разблокирован\n"
+                         f"Ранне был заблокирован пользователем {moderator.mention}\n"
+                         f"Причина: {reason}"),
+            color=discord.Color.darker_grey()
+        )
+        await post_log(guild, log)
+    
 #=============Commands=============
 @client.command()
 async def help(ctx, cmd_name=None): #partially_new
@@ -1074,7 +1189,7 @@ async def help(ctx, cmd_name=None): #partially_new
                         f"7) **{p}set_giveaway** - *начинает настройку розыгрыша*\n"
                         f"8) **{p}bannahoy [**Пользователь/ID**] <**Модератор**> <**Причина**>**\n")
         game_help_list=(f"**{p}game_info** - *как играть*\n"
-                        f"1) **{p}gem_shop** - *высылает магазин гемов*\n"
+                        f"1) **{p}gem_shop <**Ступень**>** - *высылает магазин гемов*\n"
                         f"2) **{p}buy_gems [**Уровень гема**] <**Кол-во наборов**>** - *покупает гемы указанного уровня в указанном количестве*\n"
                         f"3) **{p}inv <**Пользователь**>** - *показывает Ваш профиль (или пользователя)*\n"
                         f"4) **{p}unite [**Слот**] [**Слот**] <**Слот**>** - *объединяет 2 (или 3) гема в 1*\n"
@@ -1182,11 +1297,12 @@ async def game_info(ctx):
                "> ...\n"
                f"> {10*3**(max_level-1)} - Ур. {max_level}\n")
     desc_gold=("**Получение золота**\n"
-              "Золото можно получать, отправляя сообщения. Причём чем оно длиннее, тем больше Вы получите золота. Так же существует множитель золота. Чем больше у Вас гемов - тем больше множитель.")
+              "Золото можно получать, отправляя сообщения, но зачисляется оно не чаще раза в секунду. Причём чем они длиннее, тем больше Вы получите золота.\n"
+              "Так же существует множитель золота. Чем больше у Вас гемов - тем больше множитель.")
     desc_shop=("**Получение гемов**\n"
-               f"Наборы гемов нужно покупать в магазине, при этом каждый купленный набор занимает отдельный слот. Магазин: `{p}gem_shop`\n"
+               f"Наборы гемов нужно покупать в магазине, при этом каждый купленный набор занимает отдельный слот. Магазин: `{p}gem_shop <Ступень>`\n"
                f"Там будет 6 наборов гемов с 1 по 6 уровень. Для покупки: `{p}buy_gems [Уровень] <Кол-во наборов>`\n"
-               "Кол-во наборах в вот таких скобках: `<>` - его вводить необязательно, по умолчанию оно стоит как 1\n")
+               "Кол-во наборов в вот таких скобках: `<>` - его вводить необязательно, по умолчанию оно стоит как 1\n")
     desc_unite=("**Объединение камней**\n"
                 "В какой-то момент Вам понадобится освободить место в инвентаре, и сделать это можно объединением камней.\n"
                 f"Объединение работает так, что можно объединить 2 или 3 камня в 1: `{p}unite [Слот] [Слот] <Слот>`\n"
@@ -1305,9 +1421,6 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                                 )
                                 await ctx.send(embed=reply)
                             else:
-                                await member.add_roles(Mute)
-                                await save_task("mute", ctx.guild, member, time)
-                                
                                 log=discord.Embed(
                                     title=':lock: Пользователь заблокирован',
                                     description=(f"**{member.mention}** был заблокирован на **{raw_time}** {stamp}\n"
@@ -1316,24 +1429,9 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                                     color=discord.Color.darker_grey()
                                 )
                                 temp_log=await ctx.send(embed=log)
-                                await post_log(ctx.guild, log)
-                                await polite_send(member, f"Вам ограничили отправку сообщений на сервере **{ctx.guild.name}** на **{raw_time}** {stamp}\nПричина: {reason}")
-                                
                                 await temp_log.edit(delete_after=3)
                                 
-                                await asyncio.sleep(time)
-                                
-                                case=await delete_task("mute", ctx.guild, member)
-                                if Mute in member.roles:
-                                    await recharge(case)
-                                    log=discord.Embed(
-                                        title=':key: Пользователь разблокирован',
-                                        description=(f"**{member.mention}** был разблокирован\n"
-                                                     f"Ранне был заблокирован пользователем {ctx.author.mention}\n"
-                                                     f"Причина: {reason}"),
-                                        color=discord.Color.darker_grey()
-                                    )
-                                    await post_log(ctx.guild, log)
+                                await do_mute(ctx.guild, member, ctx.author, time, reason)
 
 @client.command()
 async def unmute(ctx, raw_user):
@@ -2685,29 +2783,65 @@ async def bannahoy(ctx, raw_user=None, raw_mod=None, *, reason="не указа�
                 await ctx.send(embed=log)
     
 @client.command()
-async def gem_shop(ctx): #new
+async def gem_shop(ctx, page="1"): #new
     global prefix
+    global max_level
     
-    gems=gem_emojis()
-    shop_msg=discord.Embed(
-        title="Магазин камней",
-        description=f"Купите любой камень, написав **{prefix}buy_gems [**Ур.**] <**Кол-во**>**",
-        color=discord.Color.blurple()
-    )
-    shop_msg.add_field(name=f"Ур. 1: {gems[0]}", value="**Кол-во:** 10\n**Цена:** 100")
-    shop_msg.add_field(name=f"Ур. 2: {gems[1]}", value="**Кол-во:** 30\n**Цена:** 300")
-    shop_msg.add_field(name=f"Ур. 3: {gems[2]}", value="**Кол-во:** 90\n**Цена:** 900")
-    shop_msg.add_field(name=f"Ур. 4: {gems[3]}", value="**Кол-во:** 270\n**Цена:** 2700")
-    shop_msg.add_field(name=f"Ур. 5: {gems[4]}", value="**Кол-во:** 810\n**Цена:** 8100")
-    shop_msg.add_field(name=f"Ур. 6: {gems[5]}", value="**Кол-во:** 2430\n**Цена:** 24300")
-    await ctx.send(embed=shop_msg)
+    if not number(page):
+        reply=discord.Embed(
+            title="❌Ошибка",
+            description=f"Номер ступени магазина должен быть целым числом, например **{prefix}gem_shop 2**",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+    else:
+        page=int(page)
+        gems=gem_emojis()
+        shop_msg=discord.Embed(
+            title="Магазин камней",
+            description=f"Купите любой набор, написав **{prefix}buy_gems [**Ур.**] <**Кол-во**>**",
+            color=discord.Color.blurple()
+        )
+        if page>max_level//6:
+            reply=discord.Embed(
+                title="❌Ошибка",
+                description=f"Ступень магазина не найдена. Всего ступеней: {max_level//6}",            
+                color=discord.Color.red()
+            )
+            await ctx.send(embed=reply)
+        else:
+            data=await get_data("inventories", [f"{ctx.guild.id}", f"{ctx.author.id}"])
+            
+            if data=="Error":
+                bal=0
+                slots=9*[0]
+            else:
+                user_data=data[0]
+                bal=int(user_data[0])
+                slots=[int(el) for el in user_data[1:len(user_data)]]
+            max_gem=max(slots)
+            req_gem=10*3**(6*(page-1))
+            
+            if page>1 and req_gem>max_gem:
+                reply=discord.Embed(
+                    title="❌Ошибка",
+                    description=f"Доступ открыт только тем, у кого в слотах есть минимум 1 камень величины **{req_gem}** или более",            
+                    color=discord.Color.red()
+                )
+                await ctx.send(embed=reply)
+            else:
+                for i in range(6*(page-1), 6*page):
+                    g_a=10*3**i
+                    shop_msg.add_field(name=f"Ур. {i+1}: {gems[i]}", value=f"**Кол-во:** {g_a}\n**Цена:** {10*g_a}")
+                await ctx.send(embed=shop_msg)
 
 @client.command()
 async def buy_gems(ctx, level, amount="1"): #new
     global prefix
+    global max_level
     
-    prices=[100, 300, 900, 2700, 8100, 24300]
-    gems=[10, 30, 90, 270, 810, 2430]
+    gems=[10*3**i for i in range(max_level)]
+    prices=[10*g for g in gems]
     
     if not number(level):
         reply=discord.Embed(
@@ -2739,46 +2873,53 @@ async def buy_gems(ctx, level, amount="1"): #new
             inv_list=await get_data("inventories", [str(ctx.guild.id), str(ctx.author.id)])
             if inv_list=="Error":
                 bal=0
+                slots=9*[0]
             else:
-                bal=int(inv_list[0][0])
+                player=inv_list[0]
+                bal=int(player[0])
+                slots=[int(el) for el in player[1:len(player)]]
+            max_gem=max(slots)
+            max_lvl_in_inv = gem_level(max_gem)
+            req_lvl=(level-1)//6*6+1
             
-            if price>bal:
+            if level>6 and req_lvl>max_lvl_in_inv:
                 reply=discord.Embed(
-                    title="❌Недостаточно золота",
-                    description=f"Ваша покупка стоит **{price}**, однако Ваш баланс составляет **{bal}**",
+                    title="❌Ошибка",
+                    description=f"Доступ открыт только тем, у кого в слотах есть минимум 1 камень величины **{10*3**(req_lvl-1)}** или более",            
                     color=discord.Color.red()
                 )
                 await ctx.send(embed=reply)
             else:
-                free = True
-                if inv_list!="Error":
-                    user_data=inv_list[0]
-                    user_inv=user_data[1:len(user_data)]
-                    
-                    spare_slots=count(user_inv, "0")
+                if price>bal:
+                    reply=discord.Embed(
+                        title="❌Недостаточно золота",
+                        description=f"Ваша покупка стоит **{price}**, однако Ваш баланс составляет **{bal}**",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=reply)
+                else:
+                    spare_slots=count(slots, 0)
                     if spare_slots < amount:
-                        free = False
                         reply=discord.Embed(
                             title="❌Недостаточно места",
                             description=f"Вы покупаете **{amount}** наборов камней по {gems[level-1]}, но в Вашем инвентаре свободно только **{spare_slots}** ячеек",
                             color=discord.Color.red()
                         )
                         await ctx.send(embed=reply)
-                if free:
-                    await do_buy(ctx.guild, ctx.author, price, amount*[gems[level-1]])
-                    
-                    notify=discord.Embed(
-                        title="💠 Спасибо за покупку!",
-                        description=("**Отчёт:**\n"
-                                     f"> Общая цена: {price}\n"
-                                     f"> Камней в одном наборе: {gems[level-1]}\n"
-                                     f"> Куплено наборов: {amount}\n"
-                                     f"Чтобы посмотреть инвентарь: `{prefix}inv`"),
-                        color=discord.Color.blue()
-                    )
-                    notify.set_thumbnail(url=gem_url(level))
-                    await ctx.send(embed=notify)
-                    print(gem_url(level))
+                    else:
+                        await do_buy(ctx.guild, ctx.author, price, amount*[gems[level-1]])
+                        
+                        notify=discord.Embed(
+                            title="💠 Спасибо за покупку!",
+                            description=("**Отчёт:**\n"
+                                         f"> Общая цена: {price}\n"
+                                         f"> Камней в одном наборе: {gems[level-1]}\n"
+                                         f"> Куплено наборов: {amount}\n"
+                                         f"Чтобы посмотреть инвентарь: `{prefix}inv`"),
+                            color=discord.Color.blue()
+                        )
+                        notify.set_thumbnail(url=gem_url(level))
+                        await ctx.send(embed=notify)
 
 @client.command()
 async def inv(ctx, raw_user=None): #new
@@ -3132,7 +3273,14 @@ async def on_raw_message_delete(data):
 
 @client.event
 async def on_message(message):
+    
+    await client.process_commands(message)
+    
     if not message.author.bot:
+        if spamm(message.guild, message.author, message.content) and not await has_admin(message.author, message.guild):
+            await message.delete()
+            await do_mute(message.guild, message.author, client.user, 3600, "спам")
+        
         spammed=False
         
         weight=len(message.content)
@@ -3142,7 +3290,7 @@ async def on_message(message):
                 spammed=True
                 delta=spam[1]
                 to_print=delta_to_words(delta)
-                await message.channel.send(f"{message.author.mention}\nВам осталось {to_print}, чтобы снова получить золото за длинное сообщение")
+                await polite_send(message.author, f"Вам осталось {to_print}, чтобы снова получить золото за длинное сообщение")
                 
         else:
             spam=await upd_timer(message, "small")
@@ -3157,8 +3305,6 @@ async def on_message(message):
             multy = 1+(sum(slots)/20)**0.5
             gold=round(gold*multy)
             await refresh_bal(message.guild, message.author, gold)
-    
-    await client.process_commands(message)
 
 #=====================Errors==========================
 @mute.error
