@@ -2062,6 +2062,14 @@ async def post_raid(ctx, *, reqs="not provided"):
     
 @client.command()
 async def embed(ctx, *, raw_text):
+    args=c_split(raw_text, " ")
+    mode="None"
+    ID_str="None"
+    if len(args)>0:
+        mode=args[0]
+    if len(args)>1:
+        ID_str=args[1]
+    
     head=detect_isolation(raw_text, "==")
     desc=detect_isolation(raw_text, "=")
     col=detect_isolation(raw_text, "##")
@@ -2096,11 +2104,29 @@ async def embed(ctx, *, raw_text):
             f_name=detect_isolation(field, "$$")
             f_value=detect_isolation(field, ",,")
             msg.add_field(name=list_sum(f_name), value=list_sum(f_value))
-            
-    await ctx.send(embed=msg)
-    backup_txt=f"Сырой текст команды, на всякий случай\n`{ctx.message.content}`"
-    await polite_send(ctx.author, backup_txt)
-    await ctx.message.delete()
+    
+    wrong_syntax=False
+    if mode.lower()!="edit":
+        await ctx.send(embed=msg)
+    else:
+        if not number(ID_str):
+            wrong_syntax=True
+            reply=discord.Embed(title="Ошибка", description="Укажите **ID** сообщения в данном канале")
+            await ctx.send(embed=reply)
+        else:
+            ID=int(ID_str)
+            message=await detect_message(ctx.channel.id, ID)
+            if message=="Error":
+                wrong_syntax=True
+                reply=discord.Embed(title="Ошибка", description=f"Сообщение с **ID** {ID} не найдено в этом канале")
+                await ctx.send(embed=reply)
+            else:
+                await message.edit(embed=msg)
+                
+    if not wrong_syntax:
+        backup_txt=f"Сырой текст команды, на всякий случай\n`{ctx.message.content}`"
+        await polite_send(ctx.author, backup_txt)
+        await ctx.message.delete()
 
 @client.command()
 async def set_welcome(ctx, categ, *, text="None"):
