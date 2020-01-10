@@ -1146,7 +1146,7 @@ async def do_mute(guild, member, moderator, sec, reason):
     if Mute==None:
         await setup_mute(guild)
         Mute = discord.utils.get(guild.roles, name=mute_role_name)    
-    if Mute.position < await glob_pos(member):
+    if Mute.position > await glob_pos(member):
         await member.add_roles(Mute)
         await save_task("mute", guild, member, sec)
         
