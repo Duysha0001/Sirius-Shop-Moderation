@@ -1146,40 +1146,37 @@ async def do_mute(guild, member, moderator, sec, reason):
     if Mute==None:
         await setup_mute(guild)
         Mute = discord.utils.get(guild.roles, name=mute_role_name)    
-    await member.add_roles(Mute)
-    await save_task("mute", guild, member, sec)
-    
-    visual_time=delta_to_words(datetime.timedelta(seconds=sec))
-    
-    log=discord.Embed(
-        title=':lock: Пользователь заблокирован',
-        description=(f"**{member.mention}** был заблокирован на **{visual_time}**\n"
-                     f"Мут наложен пользователем {moderator.mention}\n"
-                     f"**Причина:** {reason}"),
-        color=discord.Color.darker_grey()
-    )
-    await post_log(guild, log)
-    print(0)
-    #await polite_send(member, f"Вам ограничили отправку сообщений на сервере **{guild}** на **{visual_time}**\nПричина: {reason}")
-    print(1)
-    await asyncio.sleep(sec)
-    print(2)
-    
-    case=await delete_task("mute", guild, member)
-    print(3)
-    
-    if Mute in member.roles:
+    if Mute.position < await glob_pos(member):
+        await member.add_roles(Mute)
+        await save_task("mute", guild, member, sec)
         
-        await recharge(case)
+        visual_time=delta_to_words(datetime.timedelta(seconds=sec))
         
         log=discord.Embed(
-            title=':key: Пользователь разблокирован',
-            description=(f"**{member.mention}** был разблокирован\n"
-                         f"Ранне был заблокирован пользователем {moderator.mention}\n"
-                         f"Причина: {reason}"),
+            title=':lock: Пользователь заблокирован',
+            description=(f"**{member.mention}** был заблокирован на **{visual_time}**\n"
+                         f"Мут наложен пользователем {moderator.mention}\n"
+                         f"**Причина:** {reason}"),
             color=discord.Color.darker_grey()
         )
         await post_log(guild, log)
+        
+        await asyncio.sleep(sec)
+        
+        case=await delete_task("mute", guild, member)
+        
+        if Mute in member.roles:
+            
+            await recharge(case)
+            
+            log=discord.Embed(
+                title=':key: Пользователь разблокирован',
+                description=(f"**{member.mention}** был разблокирован\n"
+                             f"Ранне был заблокирован пользователем {moderator.mention}\n"
+                             f"Причина: {reason}"),
+                color=discord.Color.darker_grey()
+            )
+            await post_log(guild, log)
     return
 
 #=============Commands=============
