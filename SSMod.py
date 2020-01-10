@@ -1159,11 +1159,15 @@ async def do_mute(guild, member, moderator, sec, reason):
         color=discord.Color.darker_grey()
     )
     await post_log(guild, log)
-    await polite_send(member, f"Вам ограничили отправку сообщений на сервере **{guild.name}** на **{visual_time}**\nПричина: {reason}")
-    
+    print(0)
+    #await polite_send(member, f"Вам ограничили отправку сообщений на сервере **{guild}** на **{visual_time}**\nПричина: {reason}")
+    print(1)
     await asyncio.sleep(sec)
+    print(2)
     
     case=await delete_task("mute", guild, member)
+    print(3)
+    
     if Mute in member.roles:
         
         await recharge(case)
@@ -1176,7 +1180,8 @@ async def do_mute(guild, member, moderator, sec, reason):
             color=discord.Color.darker_grey()
         )
         await post_log(guild, log)
-    
+    return
+
 #=============Commands=============
 @client.command()
 async def help(ctx, cmd_name=None): #partially_new
@@ -1452,7 +1457,8 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                                 temp_log=await ctx.send(embed=log)
                                 await temp_log.edit(delete_after=3)
                                 
-                                await do_mute(ctx.guild, member, ctx.author, time, reason)
+                                client.loop.create_task(do_mute(ctx.guild, member, ctx.author, time, reason))
+                                await polite_send(member, f"Вам ограничили отправку сообщений на сервере **{guild.name}** на **{visual_time}**\nПричина: {reason}")
 
 @client.command()
 async def unmute(ctx, raw_user):
@@ -3318,15 +3324,20 @@ async def on_message(message):
         res=spamm(message.guild, message.author, message)
     
         if res[0]:
-            await do_mute(message.guild, message.author, client.user, 3600, "спам")
+            client.loop.create_task(do_mute(message.guild, message.author, client.user, 3600, "спам"))
             
-            messages=res[1]
-            for message in messages:
-                msg_id=message["id"]
-                channel_id=message["channel_id"]
+            async def go_delete(db_msg):
+                msg_id=db_msg["id"]
+                channel_id=db_msg["channel_id"]
                 message=await detect_message(channel_id, msg_id)
                 if message!="Error":
                     await message.delete()
+                return
+            
+            messages=res[1]
+            
+            for message in messages:
+                client.loop.create_task(go_delete(message))
         
         spammed=False
         
