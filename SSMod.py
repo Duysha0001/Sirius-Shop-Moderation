@@ -2109,19 +2109,29 @@ async def embed(ctx, *, raw_text):
     if mode.lower()!="edit":
         await ctx.send(embed=msg)
     else:
-        if not number(ID_str):
+        if not await has_helper(ctx.author, ctx.guild):
             wrong_syntax=True
-            reply=discord.Embed(title="Ошибка", description="Укажите **ID** сообщения в данном канале")
+            reply=discord.Embed(title="Ошибка", description="Недостаточно прав")
             await ctx.send(embed=reply)
         else:
-            ID=int(ID_str)
-            message=await detect_message(ctx.channel.id, ID)
-            if message=="Error":
+            if not number(ID_str):
                 wrong_syntax=True
-                reply=discord.Embed(title="Ошибка", description=f"Сообщение с **ID** {ID} не найдено в этом канале")
+                reply=discord.Embed(title="Ошибка", description="Укажите **ID** сообщения в данном канале")
                 await ctx.send(embed=reply)
             else:
-                await message.edit(embed=msg)
+                ID=int(ID_str)
+                message=await detect_message(ctx.channel.id, ID)
+                if message=="Error":
+                    wrong_syntax=True
+                    reply=discord.Embed(title="Ошибка", description=f"Сообщение с **ID** {ID} не найдено в этом канале")
+                    await ctx.send(embed=reply)
+                else:
+                    if message.author.id != client.user.id:
+                        wrong_syntax=True
+                        reply=discord.Embed(title="Ошибка", description=f"Я не могу редактировать это сообщение, так не я его автор")
+                        await ctx.send(embed=reply)
+                    else:
+                        await message.edit(embed=msg)
                 
     if not wrong_syntax:
         backup_txt=f"Сырой текст команды, на всякий случай\n`{ctx.message.content}`"
