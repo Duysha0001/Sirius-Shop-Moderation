@@ -1662,19 +1662,19 @@ async def unban(ctx, *, member=None):
             if unbanned==None:
                 await ctx.send(f"**{member}** нет в списке банов")
             else:
-                case=await delete_task("ban", ctx.guild, unbanned)
+                case=await delete_task("ban", ctx.guild, to_unban)
                 if case=="Error":
-                    await ctx.guild.unban(user)
+                    await ctx.guild.unban(to_unban)
                 else:
                     await recharge(case)
                 log=discord.Embed(
-                    title=f"**{member}** был разбанен",
+                    title=f"**{to_unban}** был разбанен",
                     description=f"Пользователь был разбанен администратором **{ctx.author}**",
                     color=discord.Color.dark_green()
                 )
                 temp_log=await ctx.send(embed=log)
                 await post_log(ctx.guild, log)
-                await polite_send(unbanned, f"Вы были разбанены на сервере **{ctx.guild.name}**")
+                await polite_send(to_unban, f"Вы были разбанены на сервере **{ctx.guild.name}**")
                 
                 await temp_log.edit(delete_after=3)
 
