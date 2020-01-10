@@ -367,13 +367,6 @@ def can_ban(user, guild):
             mmcheck=True
     return mmcheck
 
-def glob_pos(user):
-    pos=0
-    for r in user.roles:
-        if r.position>pos:
-            pos=r.position
-    return pos
-
 #========Database Minor tools=======
 def to_raw(data_list):
     out=""
@@ -550,6 +543,13 @@ async def get_raw_data(folder, key_words):
             return open_folder
 
 #============Bot async funcs==========
+async def glob_pos(user):
+    pos=0
+    for r in user.roles:
+        if r.position>pos:
+            pos=r.position
+    return pos
+
 async def users(server):
     await client.wait_until_ready()
     summ=0
@@ -705,7 +705,7 @@ async def recharge(case):
         if not Mute in guild.roles:
             await setup_mute(guild)
             Mute = discord.utils.get(guild.roles, name=mute_role_name)
-        if glob_pos(bot_user) > glob_pos(member):
+        if await glob_pos(bot_user) > await glob_pos(member):
             await member.remove_roles(Mute)
         
     elif mode=="ban":
@@ -781,7 +781,7 @@ async def send_welcome(member):
     if roles!="Error":
         for str_ID in roles[0]:
             role=discord.utils.get(member.guild.roles, id=int(str_ID))
-            if role!=None and role.position < glob_pos(bot_user):
+            if role!=None and role.position < await glob_pos(bot_user):
                 await member.add_roles(role)
 
 async def send_leave(member):
@@ -1426,7 +1426,7 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                     if time>86400*7:
                         await ctx.send("Мут не может быть осуществлён больше, чем на неделю")
                     else:
-                        if glob_pos(member) >= glob_pos(bot_user):
+                        if await glob_pos(member) >= await glob_pos(bot_user):
                             reply=discord.Embed(
                                 title="⚠Ошибка",
                                 description=(f"Моя роль не выше роли пользователя {member}\n"
@@ -1491,7 +1491,7 @@ async def unmute(ctx, raw_user):
                 )
                 await ctx.send(embed=log)
             else:
-                if glob_pos(member) >= glob_pos(bot_user):
+                if await glob_pos(member) >= await glob_pos(bot_user):
                     reply=discord.Embed(
                         title="⚠Ошибка",
                         description=(f"Моя роль не выше роли пользователя {member}\n"
@@ -1551,7 +1551,7 @@ async def kick(ctx, raw_user, *, reason="не указана"):
             await ctx.send(embed=reply)
         
         else:
-            if glob_pos(ctx.author) <= glob_pos(member):
+            if await glob_pos(ctx.author) <= await glob_pos(member):
                 reply=discord.Embed(
                     title="❌Недостаточно прав",
                     description=f"Вы не можете кикнуть **{member.name}**, его роль не ниже Вашей",
@@ -1559,7 +1559,7 @@ async def kick(ctx, raw_user, *, reason="не указана"):
                 )
                 await ctx.send(embed=reply)
             else:
-                if glob_pos(member) >= glob_pos(bot_user):
+                if await glob_pos(member) >= await glob_pos(bot_user):
                     reply=discord.Embed(
                         title="⚠Ошибка",
                         description=(f"Моя роль не выше роли пользователя {member}\n"
@@ -1603,7 +1603,7 @@ async def ban(ctx, raw_user, *, reason="не указана"):
             await ctx.send(embed=reply)
             
         else:
-            if glob_pos(ctx.author) <= glob_pos(member):
+            if await glob_pos(ctx.author) <= await glob_pos(member):
                 reply=discord.Embed(
                     title="❌Недостаточно прав",
                     description=f"Вы не можете забанить **{member.name}**, его роль не ниже Вашей",
@@ -1611,7 +1611,7 @@ async def ban(ctx, raw_user, *, reason="не указана"):
                 )
                 await ctx.send(embed=reply)
             else:
-                if glob_pos(member) >= glob_pos(bot_user):
+                if await glob_pos(member) >= await glob_pos(bot_user):
                     reply=discord.Embed(
                         title="⚠Ошибка",
                         description=(f"Моя роль не выше роли пользователя {member}\n"
@@ -1726,7 +1726,7 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
                     if time>604800*7:
                         await ctx.send("Бан не может быть осуществлён больше, чем на 7 недель")
                     else:
-                        if glob_pos(member) >= glob_pos(bot_user):
+                        if await glob_pos(member) >= await glob_pos(bot_user):
                             reply=discord.Embed(
                                 title="⚠Ошибка",
                                 description=(f"Моя роль не выше роли пользователя {member}\n"
@@ -2233,7 +2233,7 @@ async def set_welcome(ctx, categ, *, text="None"):
                     if not role in new_roles and role!="Error":
                         new_roles.append(role)
                         new_roles_id.append(str(role.id))
-                        if role.position >= glob_pos(bot_user):
+                        if role.position >= await glob_pos(bot_user):
                             if cant_add==[]:
                                 cant_add.append("**Роли, которые я не в праве добавлять:**")
                             cant_add.append(f"> {role.name}; **ID:** {role.id}")
@@ -2289,7 +2289,7 @@ async def welcome_info(ctx):
                 await delete_data("welcome-roles", [str(ctx.guild.id), str_ID[0]])
             else:
                 role_list.append(f"1) **{role.name}**")
-                if role.position >= glob_pos(bot_user):
+                if role.position >= await glob_pos(bot_user):
                     cant_add.append(f"> {role.name}")
         if len(cant_add)<2:
             cant_add=[]
@@ -2507,7 +2507,7 @@ async def reaction_roles(ctx, *, heading="Получите роли"):
                         )
                         await ctx.send(embed=reply)
                     else:
-                        if role.position >= glob_pos(ctx.author):
+                        if role.position >= await glob_pos(ctx.author):
                             reply=discord.Embed(
                                 title="❌ Эта роль выше Вашей",
                                 description=f"Роль <@&{role.id}> выше вашей максимальной роли на этом сервере. Попробуйте снова с другой ролью, или напишите `stop` для отмены",
