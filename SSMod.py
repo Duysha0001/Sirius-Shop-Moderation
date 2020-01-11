@@ -542,26 +542,6 @@ async def can_ban(user, guild):
             mmcheck=True
     return mmcheck
 
-async def users(server):
-    await client.wait_until_ready()
-    summ=0
-    bots=0
-    for user in server.members:
-        summ+=1
-        if user.bot==1:
-            bots+=1
-    channel=discord.utils.get(server.channels, name='stats')
-    if channel in server.channels:
-        stats=discord.Embed(
-            title=':bar_chart: __**Server stats**__ :bar_chart:',
-            color=discord.Color.green()
-        )
-        stats.add_field(name='Total users:', value=f'**{summ}**')
-        stats.add_field(name='Total bots:', value=f'**{bots}**')
-        stats.add_field(name='Total humans:', value=f'**{summ-bots}**')
-        await channel.purge(limit=1)
-        await channel.send(embed=stats)
-
 async def post_log(guild, log_embed):
     log_channels=await get_data("log-channels", [str(guild.id)])
     if not log_channels=="Error":
@@ -1132,6 +1112,38 @@ async def upd_timer(message, key_1):
                 users_timers[key_1][user_guild].pop(user)
                 return [False, False]
 
+async def update_stats(guild):
+    everyone = discord.utils.get(guild.roles, name="@everyone")
+    
+    amounts={
+        "Всего:": len(guild.members),
+        "Ботов:": 0,
+        "Людей:": 0
+        }
+    
+    for m in guild.members:
+        if m.bot:
+            amounts["Ботов:"]+=1
+    amounts["Людей:"]=amounts["Всего:"]-amounts["Ботов:"]
+    
+    channels = {
+        "Всего:": None,
+        "Ботов:": None,
+        "Людей:": None
+             }
+    
+    for vc in guild.voice_channels:
+        for entity in channels:
+            if vc.name.find(entity)!=-1 and channels[entity]==None:
+                channels[entity] = vc
+        
+    for entity in channels:
+        if channels[entity]==None:
+            channels[entity] = await guild.create_voice_channel(f"{entity} {amounts[entity]}")
+            await channels[entity].set_permissions(everyone, connect = False)
+        else:
+            await channels[entity].edit(name=f"{entity} {amounts[entity]}")
+
 async def do_mute(guild, member, moderator, sec, reason):
     global mute_role_name
     
@@ -1448,6 +1460,7 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                                 await temp_log.edit(delete_after=3)
                                 
                                 client.loop.create_task(do_mute(ctx.guild, member, ctx.author, time, reason))
+                                await ctx.message.delete()
                                 await polite_send(member, f"Вам ограничили отправку сообщений на сервере **{guild.name}** на **{visual_time}**\nПричина: {reason}")
 
 @client.command()
@@ -1506,6 +1519,7 @@ async def unmute(ctx, raw_user):
                     await post_log(ctx.guild, log)
                     
                     await temp_log.edit(delete_after=3)
+                    await ctx.message.delete()
                 
 @client.command(aliases=["blacklist"])
 async def black(ctx):
@@ -1575,6 +1589,7 @@ async def kick(ctx, raw_user, *, reason="не указана"):
                     await polite_send(member, f"Вы были кикнуты с сервера **{ctx.guild.name}**.\n**Причина:** {reason}")
                     
                     await temp_log.edit(delete_after=3)
+                    await ctx.message.delete()
                 
 @client.command()
 async def ban(ctx, raw_user, *, reason="не указана"):
@@ -1630,6 +1645,7 @@ async def ban(ctx, raw_user, *, reason="не указана"):
                     await polite_send(member, f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}")
                     
                     await temp_log.edit(delete_after=3)
+                    await ctx.message.delete()
 
 @client.command()
 async def unban(ctx, *, member=None):
@@ -1674,6 +1690,7 @@ async def unban(ctx, *, member=None):
                 await polite_send(to_unban, f"Вы были разбанены на сервере **{ctx.guild.name}**")
                 
                 await temp_log.edit(delete_after=3)
+                await ctx.message.delete()
 
 @client.command()
 async def tempban(ctx, raw_user, raw_time, *, reason=""):
@@ -1757,9 +1774,11 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
                                 )
                                 temp_log=await ctx.send(embed=log)
                                 await post_log(ctx.guild, log)
+                                
                                 await polite_send(member, f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}\n**Длительность:** {raw_time} {stamp}")
                                 
                                 await temp_log.edit(delete_after=3)
+                                await ctx.message.delete()
                                 
                                 await asyncio.sleep(time)
                                 
@@ -1864,6 +1883,7 @@ async def warn(ctx, raw_user, *, reason="не указана"):
             await polite_send(member, f"Вы были предупреждены на сервере **{ctx.guild}** модератором {ctx.author.mention}\nПричина: {reason}")
             
             await temp_log.edit(delete_after=3)
+            await ctx.message.delete()
             
 @client.command()
 async def warns(ctx, raw_user):
@@ -1957,6 +1977,7 @@ async def clean_warns(ctx, raw_user):
             await post_log(ctx.guild, log)
             
             await temp_log.edit(delete_after=3)
+            await ctx.message.delete()
     
 @client.command()
 async def clean_warn(ctx, raw_user, num):
@@ -2007,6 +2028,7 @@ async def clean_warn(ctx, raw_user, num):
                     await post_log(ctx.guild, log)
                     
                     await temp_log.edit(delete_after=3)
+                    await ctx.message.delete()
     
 @client.command(aliases=['clear','del'])
 async def clean(ctx, n="1"):
@@ -2036,25 +2058,6 @@ async def clean(ctx, n="1"):
         )
         await ctx.send(embed=NotAllowed)
 
-@client.command(aliases=["raid", "post"])
-async def post_raid(ctx, *, reqs="not provided"):
-    channel=discord.utils.get(ctx.guild.channels, name="💳vip-server💳")
-    raid_role=discord.utils.get(ctx.guild.roles, name="Raid Pings")
-    if not channel in ctx.guild.channels:
-        channel=ctx.message.channel
-    if not raid_role in ctx.guild.roles:
-        ment="@everyone"
-    else:
-        ment=f"{raid_role.mention}"
-    msg=discord.Embed(
-        title="🔔Raid notification🔔",
-        description=(f"**Host:** {ctx.author.mention}\n"
-                     f"**Requirements:** {reqs}\n"
-                     f"**VIP:** {channel.mention}"),
-        color=discord.Color.dark_red()
-    )
-    await ctx.send(content=ment, embed=msg)
-    
 @client.command()
 async def embed(ctx, *, raw_text):
     args=c_split(raw_text, " ")
@@ -3274,11 +3277,11 @@ async def add(ctx, currency, gems, *, raw_user=None):
 async def on_member_join(member):
     await refresh_mute(member)
     await send_welcome(member)
-    await users(member.guild)
+    await update_stats(member.guild)
     
 @client.event
 async def on_member_remove(member):
-    await users(member.guild)
+    await update_stats(member.guild)
     await send_leave(member)
 
 @client.event
