@@ -263,8 +263,8 @@ def spamm(guild, user, message):
             "numlim": 4
             },
         "other": {
-            "timelim": 1,
-            "numlim": 10
+            "timelim": 2,
+            "numlim": 7
             }
     }
     
