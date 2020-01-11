@@ -43,16 +43,9 @@ def number(s):
 
 def word_compare(word, ethalone):
     out=0
-    last_found=-1
     for letter in word:
-        step=0
-        check=0
-        while step<len(ethalone) and check==0:
-            if ethalone[step].lower()==letter.lower() and step>last_found:
-                out+=1
-                last_found=step
-                check=1
-            step+=1
+        if letter.lower() in ethalone:
+            out+=1
     return out/max(len(word), len(ethalone))
 
 def without_seps(text):
@@ -1607,11 +1600,12 @@ async def ban(ctx, raw_user, *, reason="не указана"):
         else:
             member_pos = -1
             if member in ctx.guild.members:
+                member=discord.utils.get(ctx.guild.members, id=member.id)
                 member_pos = await glob_pos(member)
             if await glob_pos(ctx.author) <= member_pos:
                 reply=discord.Embed(
                     title="❌Недостаточно прав",
-                    description=f"Вы не можете забанить **{member.name}**, его роль не ниже Вашей",
+                    description=f"Вы не можете забанить **{member}**, его роль не ниже Вашей",
                     color=discord.Color.red()
                 )
                 await ctx.send(embed=reply)
@@ -1733,6 +1727,7 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
                     else:
                         member_pos = -1
                         if member in ctx.guild.members:
+                            member=discord.utils.get(ctx.guild.members, id=member.id)
                             member_pos = await glob_pos(member)
                         
                         if member_pos >= await glob_pos(ctx.author):
