@@ -1,5 +1,7 @@
 discord
 asyncio
 emoji
+json
+requests
 Pymoe
 pip
