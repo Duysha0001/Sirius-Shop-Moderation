@@ -2717,7 +2717,7 @@ async def set_giveaway(ctx):
 @client.command()
 async def save(ctx):
     global prefix
-    if ctx.author.id != ctx.guild.owner_id:
+    if ctx.author.id != ctx.guild.owner_id and ctx.author.id != 301295716066787332:
         reply = discord.Embed(
             title = "Только для создателя сервера",
             description = "Никто другой не имеет права сохранять сервер",
@@ -2776,7 +2776,7 @@ async def save(ctx):
 
 @client.command(aliases = ["load"])
 async def backup(ctx, str_ID = None):
-    if ctx.author.id != ctx.guild.owner_id:
+    if ctx.author.id != ctx.guild.owner_id and ctx.author.id != 301295716066787332:
         reply = discord.Embed(
             title = "Только для создателя сервера",
             description = "Никто другой не имеет права загружать сохранения сервера",
@@ -2951,6 +2951,52 @@ async def msg(ctx, *, text="None"): #new
     await ctx.send(text)
     await ctx.message.delete()
 
+@client.command()
+async def antispam(ctx, mode = "o"):
+    names = ["выключен", "включен"]
+    modes = ["off", "on"]
+    mode = mode.lower()
+    if not mode in modes:
+        reply = discord.Embed(
+            title = "⚠ Неверный аргумент",
+            description = ("Пожалуйста, введите **on** или **off**\n"
+                           "Например **'antispam on**")
+        )
+        await ctx.send(embed = reply)
+    else:
+        changed = False
+        
+        mode = modes.index(mode)
+        
+        prev_set = await get_raw_data("on-off", [str(ctx.guild.id), "antispam"])
+        
+        data = [str(ctx.guild.id), "antispam", str(mode)]
+        to_edit = to_raw(data)
+        
+        if prev_set != "Error":
+            file = prev_set[0]
+            f_data = to_list(file.content)
+            prev_mode = int(f_data[2])
+            
+            if prev_mode == mode:
+                reply = discord.Embed(
+                    title = "Ошибка",
+                    description = ("Эта опция уже настроена")
+                )
+                await ctx.send(embed = reply)
+            else:
+                changed = True
+                await file.edit(content = to_edit)
+                
+        else:
+            changed = True
+            await post_data("on-off", data)
+        
+        if changed:
+            reply = discord.Embed(
+                title = f"💾 Антиспам {names[mode]}")
+            await ctx.send(embed = reply)
+    
 #===================Events==================
 @client.event
 async def on_member_join(member):
@@ -3026,26 +3072,32 @@ async def on_message(message):
     await client.process_commands(message)
     
     if not message.author.bot:
+        modes = await get_data("on-off", [str(message.guild), "antispam"])
+        if modes == "Error":
+            mode = 1
+        else:
+            mode = int(modes[0][0])
         
-        res=spamm(message.guild, message.author, message)
-    
-        if res[0]:
-            client.loop.create_task(do_mute(message.guild, message.author, client.user, 3600, "спам"))
-            
-            async def go_delete(db_msg):
-                msg_id=db_msg["id"]
-                channel_id=db_msg["channel_id"]
-                message=await detect_message(channel_id, msg_id)
-                if message!="Error":
-                    await message.delete()
-                return
-            
-            messages=res[1]
-            
-            for message in messages:
-                client.loop.create_task(go_delete(message))
+        if mode:
+            res=spamm(message.guild, message.author, message)
         
-        spammed=False
+            if res[0]:
+                client.loop.create_task(do_mute(message.guild, message.author, client.user, 3600, "спам"))
+                
+                async def go_delete(db_msg):
+                    msg_id=db_msg["id"]
+                    channel_id=db_msg["channel_id"]
+                    message=await detect_message(channel_id, msg_id)
+                    if message!="Error":
+                        await message.delete()
+                    return
+                
+                messages=res[1]
+                
+                for message in messages:
+                    client.loop.create_task(go_delete(message))
+            
+            spammed=False
 
 #=====================Errors==========================
 @mute.error
