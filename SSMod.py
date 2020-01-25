@@ -149,7 +149,7 @@ async def restore_voice_channels(special_list, guild, categ = None):
                 pass
     return
 
-#========Bot minor tools=======
+#========Bot DEF functions=======
 def number(s):
     check=True
     nums=[str(i) for i in range(10)]
