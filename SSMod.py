@@ -3078,7 +3078,7 @@ async def on_message(message):
         else:
             mode = int(modes[0][0])
         
-        if mode:
+        if mode == 1:
             res=spamm(message.guild, message.author, message)
         
             if res[0]:
