@@ -2,15 +2,17 @@ import discord
 from discord.ext import commands
 from discord.ext.commands import Bot
 import asyncio
+import requests
 import datetime
+import json
 import os
 from emoji import UNICODE_EMOJI
 import random
 
 prefix="'"
-client=commands.Bot(command_prefix=prefix)
-bot_id=583016361677160459
-db_id=653160213607612426
+client=commands.Bot(command_prefix = prefix)
+
+db_id = 653160213607612426
 
 users_timers={"small": {}, "big": {}}
 message_buffer={}
@@ -23,13 +25,129 @@ client.remove_command('help')
 #=========Events ready============
 @client.event
 async def on_ready():
-    global bot_id
     global prefix
     print("Ready to moderate")
-    if "589922044720709656"!=str(bot_id):
+    if "589922044720709656"!=str(client.user.id):
         print("Code isn't currently running TASPA Moderation Bot")
     if prefix!="t!":
         print(f"Current prefix is {prefix}, don't forget to change it to t!")
+
+#========Backup functions===========
+def role_to_dict(role):
+    data = {
+        "name": role.name,
+        "color": role.color.value,
+        "hoist": role.hoist,
+        "mentionable": role.mentionable,
+        "permissions": role.permissions.value
+    }
+    return data
+
+def tc_to_dict(text_channel):
+    data = {
+        "name": text_channel.name,
+        "topic": text_channel.topic,
+        "slowmode_delay": text_channel.slowmode_delay,
+        "is_nsfw": text_channel.is_nsfw(),
+        "overwrites": overwrites_to_list(text_channel)
+    }
+    return data
+
+def vc_to_dict(voice_channel):
+    data = {
+        "name": voice_channel.name,
+        "user_limit": voice_channel.user_limit,
+        "overwrites": overwrites_to_list(voice_channel)
+    }
+    return data
+
+def category_to_dict(category):
+    data = {
+        "name": category.name,
+        "overwrites": overwrites_to_list(category),
+        "text_channels": [tc_to_dict(tc) for tc in category.text_channels],
+        "voice_channels": [vc_to_dict(vc) for vc in category.voice_channels]
+    }
+    return data
+
+def overwrites_to_list(channel):
+    array = []
+    overwrites = channel.overwrites
+    for obj in overwrites:
+        if obj in channel.guild.roles:
+            array.append({"role": obj.name, "overwrites": perms_to_values(overwrites[obj])})
+    return array
+
+def perms_to_values(overwrite):
+    raw_pair = overwrite.pair()
+    pair = (raw_pair[0].value, raw_pair[1].value)
+    return pair
+    
+def from_pair_values(value_pair):
+    perm_1 = discord.Permissions(permissions = value_pair[0])
+    perm_2 = discord.Permissions(permissions = value_pair[1])
+    overwrite = discord.PermissionOverwrite.from_pair(perm_1, perm_2)
+    return overwrite
+
+def list_to_overwrites(List, guild):
+    overwrites = {}
+    pairs = []
+    for payload in List:
+        name = payload["role"]
+        pair = payload["overwrites"]
+        role = discord.utils.get(guild.roles, name = name)
+        if role in guild.roles:
+            pairs.append((role, from_pair_values(pair)))
+    overwrites.update(pairs)
+    return overwrites
+
+async def detect_message(channel_id, message_id):
+    channel=client.get_channel(int(channel_id))
+    if channel==None:
+        return "Error"
+    else:
+        try:
+            message=await channel.fetch_message(int(message_id))
+        except BaseException:
+            return "Error"
+        else:
+            return message
+
+async def restore_text_channels(special_list, guild, categ = None):
+    if categ == None:
+        categ = guild
+    for tcd in special_list:
+        name = tcd["name"]
+        channel = discord.utils.get(guild.text_channels, name = name)
+        if not channel in categ.text_channels:
+            try:
+                await categ.create_text_channel(
+                    name = name,
+                    topic = tcd["topic"],
+                    slowmode_delay = tcd["slowmode_delay"],
+                    is_nsfw = tcd["is_nsfw"],
+                    overwrites = list_to_overwrites(tcd["overwrites"], guild)
+                )
+            except BaseException:
+                pass
+    return
+
+async def restore_voice_channels(special_list, guild, categ = None):
+    if categ == None:
+        categ = guild    
+    for vcd in special_list:
+        name = vcd["name"]
+        channel = discord.utils.get(guild.voice_channels, name = name)
+        if not channel in categ.voice_channels:
+            try:
+                await categ.create_voice_channel(
+                    name = name,
+                    user_limit = vcd["user_limit"],
+                    overwrites = list_to_overwrites(vcd["overwrites"], guild)
+                )
+            except BaseException:
+                pass
+    return
 
 #========Bot minor tools=======
 def number(s):
@@ -91,10 +209,10 @@ def detect_isolation(text, lll):
                 start=i+wid
     return out
 
-def list_sum(List):
+def list_sum(List, insert = "\n"):
     out=""
     for elem in List:
-        out+="\n"+str(elem)
+        out += str(insert) + str(elem)
     return out[1:len(out)]
 
 def detect_args(text, lll):
@@ -318,9 +436,7 @@ def get_user(text):
         ID=None
     else:
         ID=IDs[0]
-    user=None
-    if ID!=None:
-        user=client.get_user(ID)
+    user=client.get_user(ID)
     return user
 
 #========Database Minor tools=======
@@ -498,6 +614,17 @@ async def get_raw_data(folder, key_words):
         else:
             return open_folder
 
+async def access_folder(folder):
+    global db_id
+    db_server=client.get_guild(db_id)
+    
+    folder = discord.utils.get(db_server.channels, name=folder)
+    
+    if not folder in db_server.channels:
+        return "Error"
+    else:
+        return folder
+
 #============Bot async funcs==========
 async def glob_pos(user):
     pos=0
@@ -622,9 +749,9 @@ async def clean_past_tasks():
         now=datetime.datetime.now()
         if future<=now:
             mode=task[1]
-            guild=task[2]
-            member=task[3]
-            out.append([mode, guild, member])
+            guild_id=task[2]
+            member_id=task[3]
+            out.append([mode, guild_id, member_id])
             await file.delete()
     return out
     
@@ -664,14 +791,13 @@ async def delete_task(mode, guild, member):
         return out
     
 async def recharge(case):
-    global bot_id
     global mute_role_name
     mode=case[0]
     guild_id=int(case[1])
     member_id=int(case[2])
     guild=client.get_guild(guild_id)
     member=discord.utils.get(guild.members, id=member_id)
-    bot_user=discord.utils.get(guild.members, id=bot_id)
+    bot_user=discord.utils.get(guild.members, id=client.user.id)
     if mode=="mute":
         Mute = discord.utils.get(guild.roles, name=mute_role_name)
         if not Mute in guild.roles:
@@ -699,34 +825,21 @@ async def polite_send(user, msg):
         pass    
 
 async def refresh_mute(member):
-    global db_id
     global mute_role_name
-    db_server=client.get_guild(db_id)
     
-    folders=[c.name for c in db_server.channels]
-    if "tasks" in folders:
-        folder = discord.utils.get(db_server.channels, name="tasks")
-        key_words=["mute", str(member.guild.id), str(member.id)]
-        prev_id=None
-        
+    key_words=["None" ,"mute", str(member.guild.id), str(member.id)]
+    results = await get_data("tasks", key_words)
+    
+    if results != "Error":
         Mute = discord.utils.get(member.guild.roles, name=mute_role_name)
         if not Mute in member.guild.roles:
             await setup_mute(member.guild)
-            Mute = discord.utils.get(member.guild.roles, name=mute_role_name)        
-        
-        async for file in folder.history(limit=100):
-            if file.id==prev_id:
-                break
-            else:
-                prev_id=file.id
-                data=to_list(file.content)
-                if data[1:4]==key_words:
-                    await member.add_roles(Mute)
-                    break    
+            Mute = discord.utils.get(member.guild.roles, name=mute_role_name)
+        await member.add_roles(Mute)
+    return
     
 async def send_welcome(member):
-    global bot_id
-    bot_user=discord.utils.get(member.guild.members, id=bot_id)
+    bot_user=discord.utils.get(member.guild.members, id=client.user.id)
     
     channels=await get_data("welcome-channels", [str(member.guild.id)])
     if channels!="Error":
@@ -755,10 +868,11 @@ async def send_welcome(member):
             role=discord.utils.get(member.guild.roles, id=int(str_ID))
             if role!=None and role.position < await glob_pos(bot_user):
                 await member.add_roles(role)
+    
+    return
 
 async def send_leave(member):
-    global bot_id
-    bot_user=discord.utils.get(member.guild.members, id=bot_id)
+    bot_user=discord.utils.get(member.guild.members, id=client.user.id)
     
     channels=await get_data("leave-channels", [str(member.guild.id)])
     if channels!="Error":
@@ -781,6 +895,7 @@ async def send_leave(member):
                     prev_end=end
             text+=f"{message[prev_end:len(message)]}"
             await polite_send(channel, text)
+    return
 
 async def detect_role(guild, raw_search):
     out="Error"
@@ -980,7 +1095,6 @@ async def reset_giveaways():
             await file.edit(content=to_raw(data))
     
 async def reacted(message):
-    bot_id=client.user.id
     reaction=None
     rs=message.reactions
     for r in rs:
@@ -992,7 +1106,7 @@ async def reacted(message):
     else:
         users=[]
         async for user in reaction.users():
-            if user.id!=bot_id:
+            if user.id != client.user.id:
                 users.append(user.id)
         return users
 
@@ -1143,6 +1257,8 @@ async def update_stats(guild):
             await channels[entity].set_permissions(everyone, connect = False)
         else:
             await channels[entity].edit(name=f"{entity} {amounts[entity]}")
+    
+    return
 
 async def do_mute(guild, member, moderator, sec, reason):
     global mute_role_name
@@ -1207,7 +1323,9 @@ async def help(ctx, cmd_name=None): #partially_new
                        f"15) **{p}set_welcome [**Раздел**] [**Аргументы / delete**]** - ***{p}help set_welcome** для подробностей*\n"
                        f"16) **{p}welcome_info** - *отображает текущие настройки автоматических действий с новичками*\n")
         adm_help_list2=(f"17) **{p}reaction_roles <**Заголовок**>** - *начинает создание вывески с раздачей ролей за реакции*\n"
-                        f"18) **{p}set_leave [**Раздел**] [**Аргумент / delete**]** - ***{p}help set_leave** для подробностей*\n")
+                        f"18) **{p}set_leave [**Раздел**] [**Аргумент / delete**]** - ***{p}help set_leave** для подробностей*\n"
+                        f"19) **{p}save** - *сохраняет сервер, чтобы его можно было восстановить*\n"
+                        f"20) **{p}backup <**ID сервера**>**\n")
         user_help_list=(f"1) **{p}search [**Запрос/ID**]**\n"
                         f"2) **{p}warns [**Участник**]** - *варны участника*\n"
                         f"3) **{p}server_warns** - *все участники с варнами*\n"
@@ -1245,7 +1363,7 @@ async def help(ctx, cmd_name=None): #partially_new
              "> `+URL+` - *добавляет мал. картинку в правый верхний угол*\n"
              "> `++URL++` - *добавляет большую картинку под текстом*\n"
              "> `##Цвет из списка##` - *подкрашивает рамку цветом из списка*\n"
-             "**Список цветов:** `[red, blue, green, gold, teal, magenta]`\n"
+             "**Список цветов:** `[red, blue, green, gold, teal, magenta, purple, blurple, dark_blue, dark_red, black, white]`\n"
              "**Все эти опции не обязательны, можно отправить хоть пустую рамку**\n"
              f"**Пример:** {p}embed\n==Server update!==\n=Added **Moderator** role!=\n"),
             ("**Описание:** позволяет настроить приветственные действия с только что присоединившимся участником, имеет 3 раздела настроек\n"
@@ -1378,9 +1496,8 @@ async def remove_log_channel(ctx, raw_channel):
 
 @client.command()
 async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
-    global bot_id
     global mute_role_name
-    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
+    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
     member=await detect_member(ctx.guild, raw_user)
@@ -1465,9 +1582,8 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
 
 @client.command()
 async def unmute(ctx, raw_user):
-    global bot_id
     global mute_role_name
-    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
+    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
     member=await detect_member(ctx.guild, raw_user)
@@ -1523,7 +1639,8 @@ async def unmute(ctx, raw_user):
                 
 @client.command(aliases=["blacklist"])
 async def black(ctx):
-    bl_role="Мут"
+    global mute_role_name
+    bl_role = mute_role_name
     Blist=""
     Muted=discord.utils.get(ctx.author.guild.roles, name=bl_role)
     if not Muted in ctx.guild.roles:
@@ -1540,8 +1657,7 @@ async def black(ctx):
 
 @client.command()
 async def kick(ctx, raw_user, *, reason="не указана"):
-    global bot_id
-    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
+    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     
     if not await can_kick(ctx.author, ctx.guild):
         reply=discord.Embed(
@@ -1593,8 +1709,7 @@ async def kick(ctx, raw_user, *, reason="не указана"):
                 
 @client.command()
 async def ban(ctx, raw_user, *, reason="не указана"):
-    global bot_id
-    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
+    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     
     if not await can_ban(ctx.author, ctx.guild):
         reply=discord.Embed(
@@ -1664,38 +1779,37 @@ async def unban(ctx, *, member=None):
             )
             await ctx.send(embed=reply)
         else:
-            to_unban = get_user(member)
+            #to_unban = get_user(member)
             unbanned=None
             banned_users=await ctx.guild.bans()
             for ban_entry in banned_users:
                 user=ban_entry.user
-                if user.id == to_unban.id:
+                if f"{user.id}" == member or f"<@!{user.id}>"==member or f"{user}"==member:
                     unbanned=user
                     break
             if unbanned==None:
                 await ctx.send(f"**{member}** нет в списке банов")
             else:
-                case=await delete_task("ban", ctx.guild, to_unban)
+                case=await delete_task("ban", ctx.guild, unbanned)
                 if case=="Error":
-                    await ctx.guild.unban(to_unban)
+                    await ctx.guild.unban(unbanned)
                 else:
                     await recharge(case)
                 log=discord.Embed(
-                    title=f"**{to_unban}** был разбанен",
+                    title=f"**{unbanned}** был разбанен",
                     description=f"Пользователь был разбанен администратором **{ctx.author}**",
                     color=discord.Color.dark_green()
                 )
                 temp_log=await ctx.send(embed=log)
                 await post_log(ctx.guild, log)
-                await polite_send(to_unban, f"Вы были разбанены на сервере **{ctx.guild.name}**")
+                await polite_send(unbanned, f"Вы были разбанены на сервере **{ctx.guild.name}**")
                 
                 await temp_log.edit(delete_after=3)
                 await ctx.message.delete()
 
 @client.command()
 async def tempban(ctx, raw_user, raw_time, *, reason=""):
-    global bot_id
-    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
+    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     
     member = get_user(raw_user)
     if member==None:
@@ -2079,8 +2193,20 @@ async def embed(ctx, *, raw_text):
     else:
         col="None"
     
-    col_names=["red", "blue", "green", "gold", "teal", "magenta", "purple"]
-    colors=[discord.Color.red(), discord.Color.blue(), discord.Color.green(), discord.Color.gold(), discord.Color.teal(), discord.Color.magenta(), discord.Color.purple()]
+    col_names=["red", "blue", "green", "gold", "teal", "magenta", "purple", "blurple", "dark_blue", "dark_red", "black", "white"]
+    colors=[discord.Color.red(),
+            discord.Color.blue(),
+            discord.Color.green(),
+            discord.Color.gold(),
+            discord.Color.teal(),
+            discord.Color.magenta(),
+            discord.Color.purple(),
+            discord.Color.blurple(),
+            discord.Color.dark_blue(),
+            discord.Color.dark_red(),
+            discord.Color.from_rgb(0, 0, 0),
+            discord.Color.from_rgb(254, 254, 254)
+            ]
     col_chosen=discord.Color.dark_grey()
     
     for i in range(len(col_names)):
@@ -2139,8 +2265,7 @@ async def embed(ctx, *, raw_text):
 @client.command()
 async def set_welcome(ctx, categ, *, text="None"):
     global prefix
-    global bot_id
-    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
+    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     
     if not await has_admin(ctx.author, ctx.guild):
         reply=discord.Embed(
@@ -2323,8 +2448,7 @@ async def set_welcome(ctx, categ, *, text="None"):
 
 @client.command()
 async def welcome_info(ctx):
-    global bot_id
-    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
+    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     
     str_ID_list=await get_data("welcome-roles", [str(ctx.guild.id)])
     if str_ID_list=="Error":
@@ -2374,8 +2498,7 @@ async def welcome_info(ctx):
 @client.command()
 async def set_leave(ctx, categ, *, text="None"):
     global prefix
-    global bot_id
-    bot_user=discord.utils.get(ctx.guild.members, id=bot_id)
+    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     
     if not await has_admin(ctx.author, ctx.guild):
         reply=discord.Embed(
@@ -2816,6 +2939,197 @@ async def set_giveaway(ctx):
                         
                         await asyncio.sleep(time)
                         await finish_giveaway(give_msg)
+
+@client.command()
+async def save(ctx):
+    global prefix
+    if ctx.author.id != ctx.guild.owner_id:
+        reply = discord.Embed(
+            title = "Только для создателя сервера",
+            description = "Никто другой не имеет права сохранять сервер",
+        )
+        await ctx.send(embed = reply)
+    else:
+        reply = discord.Embed(
+            title = "💾 Сохранение сервера",
+            description = "В процессе...",
+        )
+        msg = await ctx.send(embed = reply)
+        
+        utc = []
+        uvc = []
+        for tc in ctx.guild.text_channels:
+            if tc.category == None:
+                utc.append(tc_to_dict(tc))
+        for vc in ctx.guild.voice_channels:
+            if vc.category == None:
+                uvc.append(vc_to_dict(vc))
+        
+        roles = ctx.guild.roles
+        roles.reverse()
+        data = {
+            "roles": [role_to_dict(role) for role in roles],
+            "unsorted_tc": utc,
+            "unsorted_vc": uvc,
+            "categories": [category_to_dict(c) for c in ctx.guild.categories]
+        }
+        
+        file_name = f"{ctx.guild.id}.json"
+        
+        with open(file_name, 'w', encoding='utf-8') as fh:
+            fh.write(json.dumps(data, ensure_ascii=False))
+        
+        #bruh = str(data).encode("utf-8")
+        #open(file_name, 'wb').write(bruh)
+        
+        channel = await access_folder("server-backups")
+        
+        async for m in channel.history(limit = None):
+            if m.content == f"{ctx.guild.id}":
+                await m.delete()
+                break
+        
+        await channel.send(content = f"{ctx.guild.id}", file = discord.File(file_name))
+        os.remove(file_name)
+        data = {}
+        
+        reply = discord.Embed(
+            title = "💾 Сервер сохранён",
+            description = ("Вы можете загрузить его сюда, или на любой другой свой сервер\n"
+                           f"**{prefix}backup <**ID сервера**>**"),
+        )
+        await msg.edit(embed = reply)
+
+@client.command()
+async def backup(ctx, str_ID = None):
+    if ctx.author.id != ctx.guild.owner_id:
+        reply = discord.Embed(
+            title = "Только для создателя сервера",
+            description = "Никто другой не имеет права сохранять сервер",
+        )
+        await ctx.send(embed = reply)
+    else:
+        channel = access_folder("server-backups")
+        
+        msg = None
+        if str_ID == None:
+            ID = ctx.guild.id
+        else:
+            ID = int(str_ID)
+        
+        async for m in channel.history(limit = None):
+            if m.content == f"{ID}":
+                msg = m
+                break
+        
+        if msg == None:
+            reply = discord.Embed(
+                title = "❌ Сервер не сохранён",
+                description = "Похоже, вы не сохраняли сервер",
+                color = discord.Color.red()
+            )
+            await ctx.send(embed = reply)
+        else:
+            ats = msg.attachments
+            url = ats[0].url
+            
+            download = requests.get(url)
+            buffer_name = f'{ctx.guild.id}.json'
+            
+            open(buffer_name, 'wb').write(download.content)
+            
+            with open(buffer_name, "r", encoding="utf-8") as file:
+                data = json.load(file)
+            #========/\ Loaded to dictionary /\=======
+            
+            prog_menu = [
+                "⬛ Роли",
+                "⬛ Несортированные каналы",
+                "⬛ Категории и каналы"
+            ]
+            bar = discord.Embed(
+                title = "Загрузка сервера",
+                description = f"Это займёт немного времени\n\n{list_sum(prog_menu)}",
+                color = discord.Color.from_rgb(255, 196, 139)
+            )
+            bar.set_thumbnail(url = "https://cdn.discordapp.com/attachments/664230839399481364/670609557801926666/progressbar_cat.gif")
+            msg = await ctx.send(embed = bar)
+            
+            #========Restoration=============
+            Errors = 0
+            #=====Stage 1=====
+            for rd in data["roles"]:
+                name = rd["name"]
+                role = discord.utils.get(ctx.guild.roles, name = name)
+                if not role in ctx.guild.roles:
+                    try:
+                        await ctx.guild.create_role(
+                            name = name,
+                            color = discord.Color(value = rd["color"]),
+                            hoist = rd["hoist"],
+                            mentionable = rd["mentionable"],
+                            permissions = discord.Permissions(permissions = rd["permissions"])
+                        )
+                    except BaseException:
+                        Errors += 1
+                        pass
+            
+            prog_menu[0] = "✅" + prog_menu[0][1:len(prog_menu[0])]
+            
+            bar = discord.Embed(
+                title = "Загрузка сервера",
+                description = f"Это займёт немного времени\n\n{list_sum(prog_menu)}",
+                color = discord.Color.from_rgb(255, 196, 139)
+            )
+            bar.set_thumbnail(url = "https://cdn.discordapp.com/attachments/664230839399481364/670609557801926666/progressbar_cat.gif")
+            await msg.edit(embed = bar)
+            
+            #=====Stage 2=====
+            client.loop.create_task(restore_text_channels(data["unsorted_tc"], ctx.guild))
+            client.loop.create_task(restore_voice_channels(data["unsorted_vc"], ctx.guild))
+            
+            prog_menu[1] = "✅" + prog_menu[1][1:len(prog_menu[1])]
+            
+            bar = discord.Embed(
+                title = "Загрузка сервера",
+                description = f"Это займёт немного времени\n\n{list_sum(prog_menu)}",
+                color = discord.Color.from_rgb(255, 196, 139)
+            )
+            bar.set_thumbnail(url = "https://cdn.discordapp.com/attachments/664230839399481364/670609557801926666/progressbar_cat.gif")
+            await msg.edit(embed = bar)
+            
+            #=====Stage 3=====
+            last = len(data["categories"])
+            num = 0
+            for cd in data["categories"]:
+                num += 1
+                name = cd["name"]
+                category = discord.utils.get(ctx.guild.categories, name = name)
+                if not category in ctx.guild.categories:
+                    try:
+                        category = await ctx.guild.create_category(
+                            name = name,
+                            overwrites = list_to_overwrites(cd["overwrites"], ctx.guild)
+                        )
+                        client.loop.create_task(restore_text_channels(cd["text_channels"], ctx.guild, category))
+                        if num >= last:
+                            await restore_voice_channels(cd["voice_channels"], ctx.guild, category)
+                        else:
+                            client.loop.create_task(restore_voice_channels(cd["voice_channels"], ctx.guild, category))
+                    except BaseException:
+                        Errors += 1
+                        pass
+            
+            prog_menu[2] = "✅" + prog_menu[2][1:len(prog_menu[2])]
+            
+            bar = discord.Embed(
+                title = "Загрузка сервера",
+                description = f"Сервер загружен\n\n{list_sum(prog_menu)}",
+                color = discord.Color.from_rgb(255, 196, 139)
+            )
+            if Errors > 0:
+                bar.add_field(name = "Некоторые данные могли быть не восстановлены в силу нехватки прав", value = "⚠")
+            await msg.edit(embed = bar)
 
 @client.command()
 async def bannahoy(ctx, raw_user=None, raw_mod=None, *, reason="не указана"):
@@ -3275,19 +3589,17 @@ async def add(ctx, currency, gems, *, raw_user=None):
 #===================Events==================
 @client.event
 async def on_member_join(member):
-    await refresh_mute(member)
-    await send_welcome(member)
-    await update_stats(member.guild)
+    client.loop.create_task(refresh_mute(member))
+    client.loop.create_task(send_welcome(member))
+    client.loop.create_task(update_stats(member.guild))
     
 @client.event
 async def on_member_remove(member):
-    await update_stats(member.guild)
+    client.loop.create_task(update_stats(member.guild))
     await send_leave(member)
 
 @client.event
 async def on_raw_reaction_add(data):
-    global bot_id
-    
     pairs=await get_data("reaction-roles", [str(data.guild_id), str(data.message_id)])
     if pairs!="Error":
         pairs=pairs[0]
@@ -3298,7 +3610,7 @@ async def on_raw_reaction_add(data):
         for i in range(0, len(pairs), 2):
             es.append(pairs[i])
             rs.append(pairs[i+1])
-        if emoji in es and data.user_id!=bot_id:
+        if emoji in es and data.user_id!=client.user.id:
             member=discord.utils.get(guild.members, id=data.user_id)
             
             ind=es.index(emoji)
@@ -3310,8 +3622,6 @@ async def on_raw_reaction_add(data):
             
 @client.event
 async def on_raw_reaction_remove(data):
-    global bot_id
-    
     pairs=await get_data("reaction-roles", [str(data.guild_id), str(data.message_id)])
     if pairs!="Error":
         pairs=pairs[0]
@@ -3322,7 +3632,7 @@ async def on_raw_reaction_remove(data):
         for i in range(0, len(pairs), 2):
             es.append(pairs[i])
             rs.append(pairs[i+1])
-        if emoji in es and data.user_id!=bot_id:
+        if emoji in es and data.user_id != client.user.id:
             member=discord.utils.get(guild.members, id=data.user_id)
             
             ind=es.index(emoji)
