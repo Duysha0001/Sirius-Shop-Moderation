@@ -47,9 +47,11 @@ async def syncall(ctx):
 			for role in ov:
 				await channel.set_permissions(role, overwrite = None)
 		for channel in category.channels:
-			ov = channel.overwrites
 			for role in perms:
-				await channel.set_permissions(role, overwrite = perms[role])
+				try:
+					await channel.set_permissions(role, overwrite = perms[role])
+				except BasicException:
+					pass
 		await ctx.send("Alright")
 
 #========Backup functions===========
