@@ -32,6 +32,26 @@ async def on_ready():
     if prefix!="t!":
         print(f"Current prefix is {prefix}, don't forget to change it to t!")
 
+@client.command()
+async def syncall(ctx):
+	if ctx.author.id !=301295716066787332:
+		return
+	category = ctx.channel.category
+	if category == None:
+		await ctx.send("This channel is not sorted")
+	else:
+		await ctx.send("Editing...")
+		perms = category.overwrites
+		for channel in category.channels:
+			ov = channel.overwrites
+			for role in ov:
+				await channel.set_permissions(role, overwrite = None)
+		for channel in category.channels:
+			ov = channel.overwrites
+			for role in perms:
+				await channel.set_permissions(role, overwrite = perms[role])
+		await ctx.send("Alright")
+
 #========Backup functions===========
 def role_to_dict(role):
     data = {
