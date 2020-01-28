@@ -9,7 +9,7 @@ import os
 from emoji import UNICODE_EMOJI
 import random
 
-prefix="'"
+prefix = "'"
 client=commands.Bot(command_prefix = prefix)
 
 db_id = 653160213607612426
@@ -31,28 +31,6 @@ async def on_ready():
         print("Code isn't currently running TASPA Moderation Bot")
     if prefix!="t!":
         print(f"Current prefix is {prefix}, don't forget to change it to t!")
-
-@client.command()
-async def syncall(ctx):
-	if ctx.author.id !=301295716066787332:
-		return
-	category = ctx.channel.category
-	if category == None:
-		await ctx.send("This channel is not sorted")
-	else:
-		await ctx.send("Editing...")
-		perms = category.overwrites
-		for channel in category.channels:
-			ov = channel.overwrites
-			for role in ov:
-				await channel.set_permissions(role, overwrite = None)
-		for channel in category.channels:
-			for role in perms:
-				try:
-					await channel.set_permissions(role, overwrite = perms[role])
-				except BasicException:
-					pass
-		await ctx.send("Alright")
 
 #========Backup functions===========
 def role_to_dict(role):
@@ -265,7 +243,7 @@ async def delete_data(folder, key_words):
             data_list=to_list(file.content)
             if c_partially(key_words, data_list[0:folder_depth]):
                 found=True
-                file.delete()
+                await file.delete()
                 
         if found==False:
             return "Error"
@@ -630,9 +608,13 @@ def user_position(user):
     pos=0
     for r in user.roles:
         if r.position > pos:
-            pos=r.position
+            pos = r.position
     return pos
 
+def to_member(guild, user_id):
+    member = discord.utils.get(guild.members, id = user_id)
+    return member
+    
 class detect:
     #===========DEF=========
     def role(guild, raw_search):
@@ -684,13 +666,13 @@ class detect:
 
 #============Bot async funcs==========
 async def post_log(guild, log_embed):
-    log_channels=await get_data("log-channels", [str(guild.id)])
-    if not log_channels=="Error":
+    log_channels = await get_data("log-channels", [str(guild.id)])
+    if log_channels != "Error":
         for channel_id in log_channels:
             ID=int(channel_id[0])
             channel=discord.utils.get(guild.channels, id=ID)
-            if channel in guild.channels:
-                await channel.send(embed=log_embed)
+            if channel != None:
+                await channel.send(embed = log_embed)
             else:
                 await delete_data("log-channels", [str(guild.id), str(ID)])
     
@@ -803,42 +785,15 @@ async def delete_task(mode, guild, member):
                     await file.delete()
                 
         return out
-    
-async def recharge(case):
-    global mute_role_name
-    mode=case[0]
-    guild_id=int(case[1])
-    member_id=int(case[2])
-    guild=client.get_guild(guild_id)
-    member=discord.utils.get(guild.members, id=member_id)
-    
-    bot_user=discord.utils.get(guild.members, id=client.user.id)
-    
-    if mode=="mute":
-        Mute = discord.utils.get(guild.roles, name=mute_role_name)
-        if not Mute in guild.roles:
-            await setup_mute(guild)
-            Mute = discord.utils.get(guild.roles, name=mute_role_name)
-        if user_position(bot_user) > user_position(member):
-            await member.remove_roles(Mute)
-        
-    elif mode=="ban":
-        unbanned=None
-        banned_users=await guild.bans()
-        for ban_entry in banned_users:
-            user=ban_entry.user
-            if user.id==member_id:
-                unbanned=user
-        if unbanned!=None:
-            await guild.unban(unbanned)
 
-async def polite_send(user, msg):
+async def polite_send(channel, msg, embed = None):
     try:
-        await user.send(msg)
-    except BaseException:
-        return "Error"
-    else:
-        pass    
+        if embed == None:
+            await channel.send(content = msg)
+        else:
+            await channel.send(content = msg, embed = embed)
+    except Exception:
+        pass 
 
 async def refresh_mute(member):
     global mute_role_name
@@ -855,7 +810,7 @@ async def refresh_mute(member):
     return
     
 async def send_welcome(member):
-    bot_user=discord.utils.get(member.guild.members, id=client.user.id)
+    bot_user = to_member(member.guild, client.user.id)
     
     channels=await get_data("welcome-channels", [str(member.guild.id)])
     if channels!="Error":
@@ -1113,46 +1068,154 @@ async def update_stats(guild):
     
     return
 
-async def do_mute(guild, member, moderator, sec, reason):
-    global mute_role_name
-    
-    Mute = discord.utils.get(guild.roles, name=mute_role_name)
-    if Mute==None:
-        await setup_mute(guild)
-        Mute = discord.utils.get(guild.roles, name=mute_role_name)    
-    if Mute.position > user_position(member):
-        await member.add_roles(Mute)
-        await save_task("mute", guild, member, sec)
-        
-        visual_time=delta_to_words(datetime.timedelta(seconds=sec))
-        
-        log=discord.Embed(
-            title=':lock: Пользователь заблокирован',
-            description=(f"**{member.mention}** был заблокирован на **{visual_time}**\n"
-                         f"Мут наложен пользователем {moderator.mention}\n"
-                         f"**Причина:** {reason}"),
-            color=discord.Color.darker_grey()
+async def warn_review(guild, member):
+    files = await get_raw_data("warns", [str(guild.id), str(member.id)])
+    if files == "Error":
+        files = []
+    if len(files) > 4:
+        ban_case = discord.Embed(
+            title = "Список варнов",
+            description = f"**Пользователь:** {member} ({member.mention})",
+            color = discord.Color.dark_red()
         )
-        await post_log(guild, log)
-        
-        await asyncio.sleep(sec)
-        
-        case=await delete_task("mute", guild, member)
-        
-        if Mute in member.roles:
+        num = 0
+        for file in files:
+            num += 1
             
-            await recharge(case)
+            data = to_list(file.content)
+            mod_id = int(data[2])
+            
+            mod = client.get_user(mod_id)
+            reason = data[3]
+            
+            full_desc = (f"**Модератор:** {mod} ({mod.mention})\n"
+                         f"**Причина:** {reason}")
+            ban_case.add_field(name = f"**Warn {num}**", value = full_desc, inline = False)
+            
+            await file.delete()
+        
+        client.loop.create_task(do_action.tempban(guild, member, client.user, 3600 * 24, "набрал 5 или более варнов"))
+        await post_log(guild, ban_case)
+        
+    
+class do_action:
+    async def mute(guild, member, moderator, sec, reason = "не указана"):
+        global mute_role_name
+        
+        Mute = discord.utils.get(guild.roles, name=mute_role_name)
+        if Mute==None:
+            await setup_mute(guild)
+            Mute = discord.utils.get(guild.roles, name=mute_role_name)
+        if not has_permissions(guild, member, ["manage_messages"]):
+            await member.add_roles(Mute)
+            await save_task("mute", guild, member, sec)
+            
+            visual_time = delta_to_words(datetime.timedelta(seconds=sec))
             
             log=discord.Embed(
-                title=':key: Пользователь разблокирован',
-                description=(f"**{member.mention}** был разблокирован\n"
-                             f"Ранне был заблокирован пользователем {moderator.mention}\n"
-                             f"Причина: {reason}"),
+                title=':lock: Пользователь заблокирован',
+                description=(f"**Пользователь:** {member} ({member.mention})\n"
+                             f"**Модератор:** {moderator} ({moderator.mention})\n"
+                             f"**Причина:** {reason}\n"
+                             f"**Длительность:** {visual_time}"),
                 color=discord.Color.darker_grey()
             )
             await post_log(guild, log)
-    return
+            await polite_send(member, "", log)
+            
+            await asyncio.sleep(sec)
+            
+            was_muted = (Mute in member.roles)
+            
+            await withdraw.mute(guild.id, member.id)
+            
+            if was_muted:
+                log=discord.Embed(
+                    title='🔑 Пользователь разблокирован',
+                    description=(f"**{member.mention}** был разблокирован\n"
+                                 f"**Модератор:** {client.user} ({client.user.mention})\n"
+                                 f"**Причина:** истёк срок наказания"),
+                    color=discord.Color.darker_grey()
+                )
+                await post_log(guild, log)
+                await polite_send(member, "", log)
+        return
+    async def tempban(guild, user, moderator, sec, reason = "не указана"):
+        await save_task("ban", guild, user, sec)
+        await guild.ban(user, reason = reason)
+        
+        watch = delta_to_words(datetime.timedelta(seconds = sec))
+        
+        log = discord.Embed(
+            title = f"⛔ {user} забанен",
+            description = (f"**Причина:** {reason}\n"
+                           f"**Модератор:** {moderator} ({moderator.mention})\n"
+                           f"**Длительность:** {watch}"),
+            color = discord.Color.dark_red()
+        )
+            
+        await post_log(guild, log)
+        
+        await polite_send(user, "", log)
+        
+        await asyncio.sleep(sec)
+        
+        banned_ids = [ban_entry.user.id for ban_entry in await guild.bans()]
+        was_banned = (user.id in banned_ids)
+        
+        await withdraw.ban(guild.id, user.id)
+        
+        if was_banned:
+            log=discord.Embed(
+                title=f"🟢 {user} был разбанен",
+                description=("**Причина:** истёк срок бана\n"
+                             f"**Модератор:** {client.user} ({client.user.mention})"),
+                color = discord.Color.dark_green()
+            )
+            await post_log(guild, log)
+            
+            await polite_send(user, "", log)
+        return
 
+class withdraw:
+    async def mute(guild_id, user_id):
+        global mute_role_name
+        
+        guild_id = int(guild_id)
+        user_id = int(user_id)
+        guild = client.get_guild(guild_id)
+        user = to_member(guild, user_id)
+        bot_user = to_member(guild, client.user.id)
+        
+        if guild == None or user == None:
+            await delete_data("tasks", ["None", "None", str(guild_id), str(user_id)])
+        else:
+            await delete_task("mute", guild, user)
+            
+            Mute = discord.utils.get(guild.roles, name=mute_role_name)
+            if Mute == None:
+                await setup_mute(guild)
+            elif user_position(bot_user) > user_position(user) and Mute in user.roles:
+                await user.remove_roles(Mute)
+            
+    async def ban(guild_id, user_id):
+        await delete_data("tasks", ["None", "None", str(guild_id), str(user_id)])
+        
+        guild_id = int(guild_id)
+        user_id = int(user_id)
+        guild = client.get_guild(guild_id)
+        
+        unbanned = None
+        banned_users = await guild.bans()
+        for ban_entry in banned_users:
+            banned = ban_entry.user
+            if banned.id == user_id:
+                unbanned = banned
+                break
+        
+        if unbanned != None:
+            await guild.unban(unbanned)
+    
 #=============Commands=============
 @client.command()
 async def help(ctx, cmd_name=None):
@@ -1289,7 +1352,7 @@ async def remove_log_channel(ctx, raw_channel):
 @client.command()
 async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
     global mute_role_name
-    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
+    bot_user = to_member(ctx.guild, client.user.id)
     Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
     member = detect.member(ctx.guild, raw_user)
@@ -1301,11 +1364,7 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
             )
         await ctx.send(embed=reply)
         
-    else:  
-        if not Mute in ctx.guild.roles:
-            await setup_mute(ctx.guild)
-            Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
-        
+    else:
         if not has_permissions(ctx.guild, ctx.author, ["manage_messages"]):
             reply=discord.Embed(
                 title="❌Недостаточно прав",
@@ -1365,17 +1424,17 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
                                                  f"**Причина:** {reason}"),
                                     color=discord.Color.darker_grey()
                                 )
-                                temp_log=await ctx.send(embed=log)
-                                await temp_log.edit(delete_after=3)
                                 
-                                client.loop.create_task(do_mute(ctx.guild, member, ctx.author, time, reason))
+                                temp_msg = await ctx.send(embed = log)
+                                await temp_msg.edit(delete_after = 3)
                                 await ctx.message.delete()
-                                await polite_send(member, f"Вам ограничили отправку сообщений на сервере **{guild.name}** на **{visual_time}**\nПричина: {reason}")
+                                
+                                client.loop.create_task(do_action.mute(ctx.guild, member, ctx.author, time, reason))
 
 @client.command()
 async def unmute(ctx, raw_user):
     global mute_role_name
-    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
+    bot_user = to_member(ctx.guild, client.user.id)
     Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
     member = detect.member(ctx.guild, raw_user)
@@ -1388,7 +1447,7 @@ async def unmute(ctx, raw_user):
         await ctx.send(embed=reply)
     
     else:
-        if not Mute in ctx.guild.roles:
+        if Mute == None:
             await setup_mute(ctx.guild)
             Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
         
@@ -1416,15 +1475,19 @@ async def unmute(ctx, raw_user):
                     )
                     await ctx.send(embed=reply)
                 else:
-                    case=await delete_task("mute", ctx.guild, member)
-                    await recharge(case)
+                    case = await delete_task("mute", ctx.guild, member)
+                    
+                    await withdraw.mute(ctx.guild.id, member.id)
+                    
                     log=discord.Embed(
                         title=':key: Пользователь разблокирован',
-                        description=f'**{member.mention}** был разблокирован',
+                        description=(f"**Пользователь:** {member} ({member.mention})\n"
+                                     f"**Модератор:** {ctx.author} ({ctx.author.mention})"),
                         color=discord.Color.darker_grey()
                     )
                     temp_log=await ctx.send(embed=log)
                     await post_log(ctx.guild, log)
+                    await polite_send(member, "", log)
                     
                     await temp_log.edit(delete_after=3)
                     await ctx.message.delete()
@@ -1501,7 +1564,7 @@ async def kick(ctx, raw_user, *, reason="не указана"):
                 
 @client.command()
 async def ban(ctx, raw_user, *, reason="не указана"):
-    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
+    bot_user = to_member(ctx.guild, client.user.id)
     
     if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
         reply=discord.Embed(
@@ -1543,13 +1606,14 @@ async def ban(ctx, raw_user, *, reason="не указана"):
                 else:
                     await ctx.guild.ban(member, reason=reason)
                     log=discord.Embed(
-                        title=f"**{member}** был забанен",
-                        description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}",
+                        title=f"{member} был забанен",
+                        description=(f"**Причина:** {reason}\n"
+                                     f"**Модератор:** {ctx.author} ({ctx.author.mention})"),
                         color=discord.Color.dark_red()
                     )
                     temp_log=await ctx.send(embed=log)
                     await post_log(ctx.guild, log)
-                    await polite_send(member, f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}")
+                    await polite_send(member, "", log)
                     
                     await temp_log.edit(delete_after=3)
                     await ctx.message.delete()
@@ -1580,28 +1644,31 @@ async def unban(ctx, *, member=None):
                     unbanned=user
                     break
             if unbanned==None:
-                await ctx.send(f"**{member}** нет в списке банов")
+                reply = discord.Embed(
+                    title = f"{member} нет в списке банов",
+                    description = "Возможно Вы ввели ошибочный или неполный тег / ID"
+                )
+                await ctx.send(embed = reply)
             else:
                 case=await delete_task("ban", ctx.guild, unbanned)
-                if case=="Error":
-                    await ctx.guild.unban(unbanned)
-                else:
-                    await recharge(case)
+                
+                await withdraw.ban(ctx.guild.id, unbanned.id)
+                
                 log=discord.Embed(
-                    title=f"**{unbanned}** был разбанен",
-                    description=f"Пользователь был разбанен администратором **{ctx.author}**",
+                    title=f"{unbanned} был разбанен",
+                    description=(f"**Модератор:** {ctx.author} ({ctx.author.mention})"),
                     color=discord.Color.dark_green()
                 )
                 temp_log=await ctx.send(embed=log)
                 await post_log(ctx.guild, log)
-                await polite_send(unbanned, f"Вы были разбанены на сервере **{ctx.guild.name}**")
+                await polite_send(unbanned, "", log)
                 
                 await temp_log.edit(delete_after=3)
                 await ctx.message.delete()
 
 @client.command()
-async def tempban(ctx, raw_user, raw_time, *, reason=""):
-    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
+async def tempban(ctx, raw_user, raw_time, *, reason = "не указана"):
+    bot_user = to_member(ctx.guild, client.user.id)
     
     member = get_user(raw_user)
     if member==None:
@@ -1636,6 +1703,7 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
                 dur=DurList[index]
                 raw_time=raw_time[0:len(raw_time)-1]
                 stamp=Names[index]
+                
                 if not number(raw_time):
                     reply=discord.Embed(
                         title="❌Неверный формат",
@@ -1650,7 +1718,7 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
                     else:
                         member_pos = -1
                         if member in ctx.guild.members:
-                            member=discord.utils.get(ctx.guild.members, id=member.id)
+                            member = to_member(ctx.guild, member.id)
                             member_pos = user_position(member)
                         
                         if member_pos >= user_position(ctx.author):
@@ -1670,33 +1738,19 @@ async def tempban(ctx, raw_user, raw_time, *, reason=""):
                                 )
                                 await ctx.send(embed=reply)
                             else:
-                                await save_task("ban", ctx.guild, member, time)
-                                await ctx.guild.ban(member, reason=reason)
-                                
-                                log=discord.Embed(
-                                    title=f"**{member}** был забанен",
-                                    description=f"**Причина:** {reason}\n**Забанен пользователем:** {ctx.author.mention}\n**Длительность:** {raw_time} {stamp}",
-                                    color=discord.Color.dark_red()
+                                log = discord.Embed(
+                                    title = f"⛔ {member} забанен",
+                                    description = (f"**Причина:** {reason}\n"
+                                                   f"**Модератор:** {ctx.author} ({ctx.author.mention})\n"
+                                                   f"**Длительность:** {delta_to_words(datetime.timedelta(seconds = time))}"),
+                                    color= discord.Color.dark_red()
                                 )
-                                temp_log=await ctx.send(embed=log)
-                                await post_log(ctx.guild, log)
                                 
-                                await polite_send(member, f"Вы были забанены на сервере **{ctx.guild.name}**.\n**Причина:** {reason}\n**Длительность:** {raw_time} {stamp}")
+                                client.loop.create_task(do_action.tempban(ctx.guild, member, ctx.author, time, reason))
                                 
-                                await temp_log.edit(delete_after=3)
+                                temp_msg = await ctx.send(embed = log)
+                                await temp_msg.edit(delete_after = 3)
                                 await ctx.message.delete()
-                                
-                                await asyncio.sleep(time)
-                                
-                                case=await delete_task("ban", ctx.guild, member)
-                                await recharge(case)
-                                log=discord.Embed(
-                                    title=f"**{member}** был разбанен",
-                                    description=f"**Ранее был забанен модератором:** {ctx.author.mention}\n**Длительность:** {raw_time} {stamp}",
-                                    color=discord.Color.dark_red()
-                                )
-                                await post_log(ctx.guild, log)
-                                await polite_send(member, f"Вы были разбанены на сервере **{ctx.guild.name}**")
     
 @client.command()
 async def set_mute_role(ctx):
@@ -1756,6 +1810,7 @@ async def search(ctx, raw_request):
         )
         await ctx.send(embed=results)
     
+@commands.cooldown(1, 5, commands.BucketType.member)
 @client.command()
 async def warn(ctx, raw_user, *, reason="не указана"):
     if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
@@ -1781,7 +1836,7 @@ async def warn(ctx, raw_user, *, reason="не указана"):
                 )
                 await ctx.send(embed = reply)
             else:
-                bot_user = discord.utils.get(ctx.guild.members, id = client.user.id)
+                bot_user = to_member(ctx.guild, client.user.id)
                 
                 if user_position(bot_user) <= user_position(member):
                     reply = discord.Embed(
@@ -1802,10 +1857,12 @@ async def warn(ctx, raw_user, *, reason="не указана"):
                     )
                     temp_log=await ctx.send(embed=log)
                     await post_log(ctx.guild, log)
-                    await polite_send(member, f"Вы были предупреждены на сервере **{ctx.guild}** модератором {ctx.author.mention}\nПричина: {reason}")
+                    await polite_send(member, "", log)
                     
                     await temp_log.edit(delete_after=3)
-                    await ctx.message.delete()
+                    await ctx.message.delete()                    
+                    
+                    await warn_review(ctx.guild, member)
             
 @client.command()
 async def warns(ctx, raw_user):
@@ -1896,7 +1953,7 @@ async def clean_warns(ctx, raw_user):
                 )
                 await ctx.send(embed = reply)
             else:
-                bot_user = discord.utils.get(ctx.guild.members, id = client.user.id)
+                bot_user = to_member(ctx.guild, client.user.id)
                 
                 if user_position(bot_user) <= user_position(member):
                     reply = discord.Embed(
@@ -1942,7 +1999,7 @@ async def clean_warn(ctx, raw_user, num):
                 )
                 await ctx.send(embed = reply)
             else:
-                bot_user = discord.utils.get(ctx.guild.members, id = client.user.id)
+                bot_user = to_member(ctx.guild, client.user.id)
                 
                 if user_position(bot_user) <= user_position(member):
                     reply = discord.Embed(
@@ -2105,7 +2162,7 @@ async def embed(ctx, *, raw_text):
 @client.command()
 async def set_welcome(ctx, categ, *, text="None"):
     global prefix
-    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
+    bot_user = to_member(ctx.guild, client.user.id)
     
     if not has_permissions(ctx.guild, ctx.author, ["administrator"]):
         reply=discord.Embed(
@@ -2288,7 +2345,7 @@ async def set_welcome(ctx, categ, *, text="None"):
 
 @client.command()
 async def welcome_info(ctx):
-    bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
+    bot_user = to_member(ctx.guild, client.user.id)
     
     str_ID_list=await get_data("welcome-roles", [str(ctx.guild.id)])
     if str_ID_list=="Error":
@@ -3260,54 +3317,87 @@ async def clean_warn_error(ctx, error):
         )
         await ctx.send(embed=reply)
 
+@warn.error
+async def warn_error(ctx, error):
+    if isinstance(error, commands.CommandOnCooldown):
+        
+        def TimeExpand(time):
+            if time//60!=0:
+                return str(time//60)+'m '+str(time%60)+'s'
+            else:
+                return str(time)+'s'
+        
+        cool_notify = discord.Embed(
+                title='⏳ Попробуйте позже',
+                description = f"Не торопитесь с варнами, осталось **{TimeExpand(int(error.retry_after))}**"
+            )
+        await ctx.send(embed=cool_notify)    
 #===========Tasks=========
 async def task_refresh():
+    await client.wait_until_ready()
+    await reset_tasks()
     while True:
-        await client.wait_until_ready()
-        cases=await clean_past_tasks()
+        cases = await clean_past_tasks()
         for case in cases:
-            await recharge(case)
-            guild=client.get_guild(int(case[1]))
-            member=client.get_user(int(case[2]))
+            guild = client.get_guild(int(case[1]))
+            member = client.get_user(int(case[2]))
+            
             if case[0]=="mute":
+                await withdraw.mute(case[1], case[2])
                 log=discord.Embed(
                     title=':key: Пользователь разблокирован',
-                    description=f'**{member.mention}** был разблокирован',
+                    description=(f"**Пользователь:** {member} ({member.mention})\n"
+                                 f"**Модератор:** {client.user} ({client.user.mention})\n"
+                                 "**Причина:** итсёк срок наказания"),
                     color=discord.Color.darker_grey()
                 )
                 await post_log(guild, log)
+                
             elif case[0]=="ban":
+                await withdraw.ban(case[1], case[2])
                 log=discord.Embed(
-                    title=f"**{member}** был разбанен",
+                    title=f"{member} был разбанен",
+                    description = (f"**Модератор:** {client.user} ({client.user.mention})\n"
+                                   "**Причина:** истёк срок временного бана"),
                     color=discord.Color.dark_green()
                 )
                 await post_log(guild, log)
-                await member.send(f"Вы были разбанены на сервере **{guild.name}**")
-        await reset_tasks()
-        data=await closest_inactive_task()
+                await polite_send(member, f"Вы были разбанены на сервере **{guild.name}**")
+        
+        data = await closest_inactive_task()
         
         if data!="Error":
             delay=data[1]
             case=data[0]
+            
             await asyncio.sleep(delay)
-            guild=client.get_guild(int(case[1]))
-            member=client.get_user(int(case[2]))
-            case=await delete_task(case[0], guild, member)
-            await recharge(case)
+            
+            guild = client.get_guild(int(case[1]))
+            member = client.get_user(int(case[2]))
+            
+            case = await delete_task(case[0], guild, member)
+            
             if case[0]=="mute":
+                await withdraw.mute(case[1], case[2])
                 log=discord.Embed(
                     title=':key: Пользователь разблокирован',
-                    description=f'**{member.mention}** был разблокирован',
+                    description=(f"**Пользователь:** {member} ({member.mention})\n"
+                                 f"**Модератор:** {client.user} ({client.user.mention})\n"
+                                 "**Причина:** итсёк срок наказания"),
                     color=discord.Color.darker_grey()
                 )
                 await post_log(guild, log)
+                
             elif case[0]=="ban":
+                await withdraw.ban(case[1], case[2])
                 log=discord.Embed(
-                    title=f"**{member}** был разбанен",
+                    title=f"{member} был разбанен",
+                    description = (f"**Модератор:** {client.user} ({client.user.mention})\n"
+                                   "**Причина:** истёк срок временного бана"),
                     color=discord.Color.dark_green()
                 )
                 await post_log(guild, log)
-                await member.send(f"Вы были разбанены на сервере **{guild.name}**")
+                await polite_send(member, f"Вы были разбанены на сервере **{guild.name}**")
         else:
             break
     return
