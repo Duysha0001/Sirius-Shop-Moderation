@@ -615,6 +615,14 @@ def to_member(guild, user_id):
     member = discord.utils.get(guild.members, id = user_id)
     return member
     
+def lack_of_perms_msg(perm_name_list):
+    reply = discord.Embed(
+        title = "🛠 Недостаточно прав",
+        description = ("**Требуемые права:**\n"
+                       f"{list_sum(perm_name_list)}")
+    )
+    return reply
+    
 class detect:
     #===========DEF=========
     def role(guild, raw_search):
@@ -662,7 +670,7 @@ class detect:
             except BaseException:
                 return "Error"
             else:
-                return message    
+                return message
 
 #============Bot async funcs==========
 async def post_log(guild, log_embed):
@@ -1187,6 +1195,8 @@ class withdraw:
         user = to_member(guild, user_id)
         bot_user = to_member(guild, client.user.id)
         
+        was_muted = False
+        
         if guild == None or user == None:
             await delete_data("tasks", ["None", "None", str(guild_id), str(user_id)])
         else:
@@ -1196,7 +1206,10 @@ class withdraw:
             if Mute == None:
                 await setup_mute(guild)
             elif user_position(bot_user) > user_position(user) and Mute in user.roles:
+                was_muted = True
                 await user.remove_roles(Mute)
+                
+        return was_muted
             
     async def ban(guild_id, user_id):
         await delete_data("tasks", ["None", "None", str(guild_id), str(user_id)])
@@ -1215,6 +1228,9 @@ class withdraw:
         
         if unbanned != None:
             await guild.unban(unbanned)
+            return True
+        else:
+            return False
     
 #=============Commands=============
 @client.command()
@@ -1323,31 +1339,39 @@ async def help(ctx, cmd_name=None):
 
 @client.command()
 async def set_log_channel(ctx, raw_channel):
-    channel = detect.channel(ctx.guild, raw_channel)
-    if channel=="Error":
-        await ctx.send("Канал не найден")
+    if not has_permissions(ctx.guild, ctx.author, ["manage_channels"]):
+        reply = lack_of_perms_msg(["Управлять каналами"])
+        await ctx.send(embed = reply)
     else:
-        await post_data("log-channels", [str(ctx.guild.id), str(channel.id)])
-        reply=discord.Embed(
-            title="Настройка завершена",
-            description=f"Канал для логов успешно настроен как {channel.mention}",
-            color=discord.Color.green()
-        )
-        await ctx.send(embed=reply)
+        channel = detect.channel(ctx.guild, raw_channel)
+        if channel=="Error":
+            await ctx.send("Канал не найден")
+        else:
+            await post_data("log-channels", [str(ctx.guild.id), str(channel.id)])
+            reply=discord.Embed(
+                title="Настройка завершена",
+                description=f"Канал для логов успешно настроен как {channel.mention}",
+                color=discord.Color.green()
+            )
+            await ctx.send(embed=reply)
 
 @client.command()
 async def remove_log_channel(ctx, raw_channel):
-    channel = detect.channel(ctx.guild, raw_channel)
-    if channel=="Error":
-        await ctx.send("Канал не найден")
+    if not has_permissions(ctx.guild, ctx.author, ["manage_channels"]):
+        reply = lack_of_perms_msg(["Управлять каналами"])
+        await ctx.send(embed = reply)
     else:
-        await delete_data("log-channels", [str(ctx.guild.id), str(channel.id)])
-        reply=discord.Embed(
-            title="Канал отвязан",
-            description=f"Канал для логов успешно отвязан от {channel.mention}",
-            color=discord.Color.green()
-        )
-        await ctx.send(embed=reply)
+        channel = detect.channel(ctx.guild, raw_channel)
+        if channel=="Error":
+            await ctx.send("Канал не найден")
+        else:
+            await delete_data("log-channels", [str(ctx.guild.id), str(channel.id)])
+            reply=discord.Embed(
+                title="Канал отвязан",
+                description=f"Канал для логов успешно отвязан от {channel.mention}",
+                color=discord.Color.green()
+            )
+            await ctx.send(embed=reply)
 
 @client.command()
 async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
@@ -1355,22 +1379,20 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
     bot_user = to_member(ctx.guild, client.user.id)
     Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
-    member = detect.member(ctx.guild, raw_user)
-    if member=="Error":
-        reply=discord.Embed(
-            title="❌Пользователь не найден",
-            description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
-            color=discord.Color.red()
-            )
-        await ctx.send(embed=reply)
+    if not has_permissions(ctx.guild, ctx.author, ["manage_messages"]):
+        reply = lack_of_perms_msg(["Управлять сообщениями"])
+        await ctx.send(embed = reply)
         
     else:
-        if not has_permissions(ctx.guild, ctx.author, ["manage_messages"]):
+        member = detect.member(ctx.guild, raw_user)
+        if member=="Error":
             reply=discord.Embed(
-                title="❌Недостаточно прав",
+                title="❌Пользователь не найден",
+                description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
                 color=discord.Color.red()
-            )
+                )
             await ctx.send(embed=reply)
+            
         else:
             AbrList=['s','m','h','d']
             DurList=[1,60,3600,3600*24]
@@ -1437,27 +1459,25 @@ async def unmute(ctx, raw_user):
     bot_user = to_member(ctx.guild, client.user.id)
     Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
-    member = detect.member(ctx.guild, raw_user)
-    if member=="Error":
-        reply=discord.Embed(
-            title="❌Пользователь не найден",
-            description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
-            color=discord.Color.red()
-            )
-        await ctx.send(embed=reply)
+    if not has_permissions(ctx.guild, ctx.author, ["manage_messages"]):
+        reply = lack_of_perms_msg(["Управлять сообщениями"])
+        await ctx.send(embed = reply)
     
     else:
-        if Mute == None:
-            await setup_mute(ctx.guild)
-            Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
-        
-        if not has_permissions(ctx.guild, ctx.author, ["manage_messages"]):
+        member = detect.member(ctx.guild, raw_user)
+        if member=="Error":
             reply=discord.Embed(
-                title="❌Недостаточно прав",
+                title="❌Пользователь не найден",
+                description=f"Вы ввели **{raw_user}** подразумевая участника сервера, но он не был найден",
                 color=discord.Color.red()
-            )
+                )
             await ctx.send(embed=reply)
+        
         else:
+            if Mute == None:
+                await setup_mute(ctx.guild)
+                Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
+            
             if not Mute in member.roles:
                 log=discord.Embed(
                     title='Пользователь не заблокирован',
@@ -1515,10 +1535,7 @@ async def kick(ctx, raw_user, *, reason="не указана"):
     bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     
     if not has_permissions(ctx.guild, ctx.author, ["kick_members"]):
-        reply=discord.Embed(
-            title="❌Недостаточно прав",
-            color=discord.Color.red()
-        )
+        reply = lack_of_perms_msg(["Кикать участников"])
         await ctx.send(embed=reply)
     else:
         member = detect.member(ctx.guild, raw_user)
@@ -1567,10 +1584,7 @@ async def ban(ctx, raw_user, *, reason="не указана"):
     bot_user = to_member(ctx.guild, client.user.id)
     
     if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
-        reply=discord.Embed(
-            title="❌Недостаточно прав",
-            color=discord.Color.red()
-        )
+        reply = lack_of_perms_msg(["Банить участников"])
         await ctx.send(embed=reply)
     else:
         member = get_user(raw_user)
@@ -1621,10 +1635,7 @@ async def ban(ctx, raw_user, *, reason="не указана"):
 @client.command()
 async def unban(ctx, *, member=None):
     if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
-        reply=discord.Embed(
-            title="❌Недостаточно прав",
-            color=discord.Color.red()
-        )
+        reply = lack_of_perms_msg(["Банить участников"])
         await ctx.send(embed=reply)
     else:
         if member==None:
@@ -1670,22 +1681,19 @@ async def unban(ctx, *, member=None):
 async def tempban(ctx, raw_user, raw_time, *, reason = "не указана"):
     bot_user = to_member(ctx.guild, client.user.id)
     
-    member = get_user(raw_user)
-    if member==None:
-        reply=discord.Embed(
-            title="❌Пользователь не найден",
-            description=f"Вы ввели **{raw_user}** подразумевая пользователя, но он не был найден",
-            color=discord.Color.red()
-            )
-        await ctx.send(embed=reply)
-        
-    else:  
-        if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
+    if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
+        reply = lack_of_perms_msg(["Банить участников"])
+        await ctx.send(embed = reply)
+    else:
+        member = get_user(raw_user)
+        if member==None:
             reply=discord.Embed(
-                title="❌Недостаточно прав",
+                title="❌Пользователь не найден",
+                description=f"Вы ввели **{raw_user}** подразумевая пользователя, но он не был найден",
                 color=discord.Color.red()
-            )
+                )
             await ctx.send(embed=reply)
+            
         else:
             AbrList=['s','m','h','d','w']
             DurList=[1,60,3600,86400,604800]
@@ -1754,14 +1762,18 @@ async def tempban(ctx, raw_user, raw_time, *, reason = "не указана"):
     
 @client.command()
 async def set_mute_role(ctx):
-    await ctx.send("🕑 пожалуйста, подождите...")
-    await setup_mute(ctx.guild)
-    log=discord.Embed(
-        title="✅Настройка завершена",
-        description="Роль мута настроена во всех каналах без явных ошибок",
-        color=discord.Color.green()
-    )
-    await ctx.send(embed=log)
+    if not has_permissions(ctx.guild, ctx.author, ["manage_channels"]):
+        reply = lack_of_perms_msg(["Управлять каналами"])
+        await ctx.send(embed = reply)
+    else:
+        await ctx.send("🕑 пожалуйста, подождите...")
+        await setup_mute(ctx.guild)
+        log=discord.Embed(
+            title="✅Настройка завершена",
+            description="Роль мута настроена во всех каналах без явных ошибок",
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=log)
     
 @client.command()
 async def search(ctx, raw_request):
@@ -1814,10 +1826,7 @@ async def search(ctx, raw_request):
 @client.command()
 async def warn(ctx, raw_user, *, reason="не указана"):
     if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
-        reply=discord.Embed(
-            title="❌Недостаточно прав",
-            color=discord.Color.red()
-        )
+        reply = lack_of_perms_msg(["Банить участников"])
         await ctx.send(embed=reply)
     else:
         member = detect.member(ctx.guild, raw_user)
@@ -1931,10 +1940,7 @@ async def server_warns(ctx):
 @client.command()
 async def clean_warns(ctx, raw_user):
     if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
-        reply=discord.Embed(
-            title="❌Недостаточно прав",
-            color=discord.Color.red()
-        )
+        reply = lack_of_perms_msg(["Банить участников"])
         await ctx.send(embed=reply)
     else:
         member = detect.member(ctx.guild, raw_user)
@@ -1977,10 +1983,7 @@ async def clean_warns(ctx, raw_user):
 @client.command()
 async def clean_warn(ctx, raw_user, num):
     if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
-        reply=discord.Embed(
-            title="❌Недостаточно прав",
-            color=discord.Color.red()
-        )
+        reply = lack_of_perms_msg(["Банить участников"])
         await ctx.send(embed=reply)
     else:
         member = detect.member(ctx.guild, raw_user)
@@ -2063,10 +2066,7 @@ async def clean(ctx, n="1"):
             await asyncio.sleep(3)
             await msg.delete()
     else:
-        NotAllowed=discord.Embed(
-            title='❌Недостаточно прав',
-            color=discord.Color.red()
-        )
+        NotAllowed = lack_of_perms_msg(["Управлять сообщениями"])
         await ctx.send(embed=NotAllowed)
 
 @client.command()
@@ -2165,11 +2165,7 @@ async def set_welcome(ctx, categ, *, text="None"):
     bot_user = to_member(ctx.guild, client.user.id)
     
     if not has_permissions(ctx.guild, ctx.author, ["administrator"]):
-        reply=discord.Embed(
-            title="❌Ошибка",
-            description="Недостаточно прав",
-            color=discord.Color.red()
-        )
+        reply = lack_of_perms_msg(["Администратор"])
         await ctx.send(embed=reply)
         
     else:
@@ -2398,11 +2394,7 @@ async def set_leave(ctx, categ, *, text="None"):
     bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     
     if not has_permissions(ctx.guild, ctx.author, ["administrator"]):
-        reply=discord.Embed(
-            title="❌Ошибка",
-            description="Недостаточно прав",
-            color=discord.Color.red()
-        )
+        reply = lack_of_perms_msg(["Администратор"])
         await ctx.send(embed=reply)
         
     else:
@@ -2501,11 +2493,7 @@ async def reaction_roles(ctx, *, heading="Получите роли"):
     global prefix
     
     if not has_permissions(ctx.guild, ctx.author, ["administrator"]):
-        reply=discord.Embed(
-            title="❌Ошибка",
-            description="Недостаточно прав",
-            color=discord.Color.red()
-        )
+        reply = lack_of_perms_msg(["Администратор"])
         await ctx.send(embed=reply)
     else:
         reply=discord.Embed(
@@ -3077,11 +3065,7 @@ async def msg(ctx, *, text="None"): #new
 @client.command()
 async def antispam(ctx, mode = "o"):
     if not has_permissions(ctx.guild, ctx.author, ["administrator"]):
-        reply = discord.Embed(
-            title = "❌ Недостаточно прав",
-            description = "Требуемые права: Администратор",
-            color = discord.Color.red()
-        )
+        reply = lack_of_perms_msg(["Администратор"])
         await ctx.send(embed = reply)
     else:
         names = ["выключен", "включен"]
@@ -3237,7 +3221,8 @@ async def mute_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         reply=discord.Embed(
             title="❌Недостаточно аргументов",
-            description=f"Формат: **{prefix}mute [**Упомянуть участника**] [**Время**] [**Причина**]**\nНапример:\n**'mute @Player#0000 5m**",
+            description=(f"Формат: **{prefix}mute [**Участник**] [**Время**] [**Причина**]**\n"
+                         f"Например: **{prefix}mute @Player#0000 5m**"),
             color=discord.Color.red()
         )
         await ctx.send(embed=reply)
@@ -3248,7 +3233,7 @@ async def unmute_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         reply=discord.Embed(
             title="❌Недостаточно аргументов",
-            description=f"Формат: **{prefix}unmute [**Упомянуть участника**]**",
+            description=f"Формат: **{prefix}unmute [**Участник**]**",
             color=discord.Color.red()
         )
         await ctx.send(embed=reply)
@@ -3259,7 +3244,8 @@ async def kick_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         Miss=discord.Embed(
             title=':hourglass: Недостаточно аргументов :hourglass:',
-            description=f"Попробуйте снова, следуя формату\n**{prefix}kick [**@Player#0000**] [**Причина**]**\nНапример:\n**'kick @Player#0000 спам**",
+            description=(f"Формат: **{prefix}kick [**Участник**] [**Причина**]**\n"
+                         f"Например: **{prefix}kick @Player#0000 спам**"),
             color=discord.Color.red()
         )
         await ctx.send(embed=Miss)
@@ -3269,7 +3255,8 @@ async def ban_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         Miss=discord.Embed(
             title=':hourglass: Недостаточно аргументов :hourglass:',
-            description=f"Попробуйте снова, следуя формату\n**{prefix}ban [**@Player#0000**] [**Причина**]**\nНапример:\n**'ban @Player#0000 порнография**",
+            description=(f"Формат: **{prefix}ban [**Участник**] [**Причина**]**\n"
+                         f"Например: **{prefix}ban @Player#0000 грубое нарушение правил**"),
             color=discord.Color.red()
         )
         await ctx.send(embed=Miss)
@@ -3280,7 +3267,8 @@ async def set_log_channel_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         Miss=discord.Embed(
             title=':hourglass: Недостаточно аргументов :hourglass:',
-            description=f"Попробуйте снова, следуя формату\n**{prefix}set_log_channel [**ID канала**]**\nНапример:\n**'set_log_channel {ctx.channel.id}**",
+            description=(f"Формат: **{prefix}set_log_channel [**Канал**]**\n"
+                         f"Например: **{prefix}set_log_channel {ctx.channel.mention}**"),
             color=discord.Color.red()
         )
         await ctx.send(embed=Miss)
@@ -3291,7 +3279,8 @@ async def remove_log_channel_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         Miss=discord.Embed(
             title=':hourglass: Недостаточно аргументов :hourglass:',
-            description=f"Попробуйте снова, следуя формату\n**{prefix}remove_log_channel [**ID канала**]**\nНапример:\n**'remove_log_channel {ctx.channel.id}**",
+            description=(f"Формат: **{prefix}remove_log_channel [**Канал**]**\n"
+                         f"Например: **{prefix}remove_log_channel {ctx.channel.mention}**"),
             color=discord.Color.red()
         )
         await ctx.send(embed=Miss)
@@ -3302,17 +3291,20 @@ async def tempban_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         reply=discord.Embed(
             title="❌Недостаточно аргументов",
-            description=f"Формат: **{prefix}tempban [**Упомянуть участника/ID**] [**Время**] [**Причина**]**\nНапример:\n**'tempban @Player#0000 5m спам**",
+            description=(f"Формат: **{prefix}tempban [**Участник**] [**Время**] [**Причина**]**\n"
+                         f"Например: **{prefix}tempban @Player#0000 5m нарушение правил**"),
             color=discord.Color.red()
         )
         await ctx.send(embed=reply)
+
 @clean_warn.error
 async def clean_warn_error(ctx, error):
     global prefix
     if isinstance(error, commands.MissingRequiredArgument):
         reply=discord.Embed(
             title="❌Недостаточно аргументов",
-            description=f"Формат: **{prefix}clean_warn [**Упомянуть участника/ID**] [**Номер варна**]**\nНапример:\n**'clean_warn @Player#0000 1**",
+            description=(f"Формат: **{prefix}clean_warn [**Участник**] [**Номер варна**]**\n"
+                         f"Например: **{prefix}clean_warn @Player#0000 1**"),
             color=discord.Color.red()
         )
         await ctx.send(embed=reply)
@@ -3343,26 +3335,28 @@ async def task_refresh():
             member = client.get_user(int(case[2]))
             
             if case[0]=="mute":
-                await withdraw.mute(case[1], case[2])
-                log=discord.Embed(
-                    title=':key: Пользователь разблокирован',
-                    description=(f"**Пользователь:** {member} ({member.mention})\n"
-                                 f"**Модератор:** {client.user} ({client.user.mention})\n"
-                                 "**Причина:** итсёк срок наказания"),
-                    color=discord.Color.darker_grey()
-                )
-                await post_log(guild, log)
+                was_muted = await withdraw.mute(case[1], case[2])
+                if was_muted:
+                    log=discord.Embed(
+                        title=':key: Пользователь разблокирован',
+                        description=(f"**Пользователь:** {member} ({member.mention})\n"
+                                     f"**Модератор:** {client.user} ({client.user.mention})\n"
+                                     "**Причина:** итсёк срок наказания"),
+                        color=discord.Color.darker_grey()
+                    )
+                    await post_log(guild, log)
                 
             elif case[0]=="ban":
-                await withdraw.ban(case[1], case[2])
-                log=discord.Embed(
-                    title=f"{member} был разбанен",
-                    description = (f"**Модератор:** {client.user} ({client.user.mention})\n"
-                                   "**Причина:** истёк срок временного бана"),
-                    color=discord.Color.dark_green()
-                )
-                await post_log(guild, log)
-                await polite_send(member, f"Вы были разбанены на сервере **{guild.name}**")
+                was_banned = await withdraw.ban(case[1], case[2])
+                if was_banned:
+                    log=discord.Embed(
+                        title=f"{member} был разбанен",
+                        description = (f"**Модератор:** {client.user} ({client.user.mention})\n"
+                                       "**Причина:** истёк срок временного бана"),
+                        color=discord.Color.dark_green()
+                    )
+                    await post_log(guild, log)
+                    await polite_send(member, f"Вы были разбанены на сервере **{guild.name}**")
         
         data = await closest_inactive_task()
         
@@ -3378,26 +3372,28 @@ async def task_refresh():
             case = await delete_task(case[0], guild, member)
             
             if case[0]=="mute":
-                await withdraw.mute(case[1], case[2])
-                log=discord.Embed(
-                    title=':key: Пользователь разблокирован',
-                    description=(f"**Пользователь:** {member} ({member.mention})\n"
-                                 f"**Модератор:** {client.user} ({client.user.mention})\n"
-                                 "**Причина:** итсёк срок наказания"),
-                    color=discord.Color.darker_grey()
-                )
-                await post_log(guild, log)
+                was_muted = await withdraw.mute(case[1], case[2])
+                if was_muted:
+                    log=discord.Embed(
+                        title=':key: Пользователь разблокирован',
+                        description=(f"**Пользователь:** {member} ({member.mention})\n"
+                                     f"**Модератор:** {client.user} ({client.user.mention})\n"
+                                     "**Причина:** итсёк срок наказания"),
+                        color=discord.Color.darker_grey()
+                    )
+                    await post_log(guild, log)
                 
             elif case[0]=="ban":
-                await withdraw.ban(case[1], case[2])
-                log=discord.Embed(
-                    title=f"{member} был разбанен",
-                    description = (f"**Модератор:** {client.user} ({client.user.mention})\n"
-                                   "**Причина:** истёк срок временного бана"),
-                    color=discord.Color.dark_green()
-                )
-                await post_log(guild, log)
-                await polite_send(member, f"Вы были разбанены на сервере **{guild.name}**")
+                was_banned = await withdraw.ban(case[1], case[2])
+                if was_banned:
+                    log=discord.Embed(
+                        title=f"{member} был разбанен",
+                        description = (f"**Модератор:** {client.user} ({client.user.mention})\n"
+                                       "**Причина:** истёк срок временного бана"),
+                        color=discord.Color.dark_green()
+                    )
+                    await post_log(guild, log)
+                    await polite_send(member, f"Вы были разбанены на сервере **{guild.name}**")
         else:
             break
     return
