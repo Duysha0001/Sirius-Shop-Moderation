@@ -16,7 +16,6 @@ db_id = 653160213607612426
 
 users_timers={"small": {}, "big": {}}
 message_buffer={}
-max_level=12
 
 mute_role_name="Мут"
 
@@ -25,12 +24,9 @@ client.remove_command('help')
 #=========Events ready============
 @client.event
 async def on_ready():
-    global prefix
-    print("Ready to moderate")
-    if "589922044720709656"!=str(client.user.id):
-        print("Code isn't currently running TASPA Moderation Bot")
-    if prefix!="t!":
-        print(f"Current prefix is {prefix}, don't forget to change it to t!")
+    print(">> Bot is ready\n"
+          f">> Current bot user: {client.user}\n"
+          f">> Current prefix: {prefix}")
 
 #========Backup functions===========
 def role_to_dict(role):
@@ -137,6 +133,29 @@ async def restore_voice_channels(special_list, guild, categ = None):
                 pass
     return
 
+#========Token DEF functions=========
+#========Token SYNC DEF functions=====
+async def get_token(guild):
+    results = await get_data("token-emojis", [str(guild.id)])
+    if results == "Error":
+        return "💰"
+    else:
+        return results[0][0]
+
+async def role_review(member, bal):
+    files = await get_raw_data("auto-pay-roles", [str(member.guild.id)])
+    if files != "Error":
+        for file in files:
+            result = to_list(file.content)
+            req_tokens = int(result[1])
+            if bal >= req_tokens:
+                role_id = int(result[2])
+                role = discord.utils.get(member.guild.roles, id = role_id)
+                if role == None:
+                    await file.delete()
+                else:
+                    await member.add_roles(role)
+    
 #========Database Minor tools=======
 def to_raw(data_list):
     out=""
@@ -583,9 +602,9 @@ def perms_for(role):
     }
     return owned
 
-def has_permissions(guild, member, perm_array):
+def has_permissions(member, perm_array):
     to_have = len(perm_array)
-    if member.id == guild.owner_id:
+    if member.id == member.guild.owner_id:
         return True
     else:
         found_num = 0
@@ -604,6 +623,15 @@ def has_permissions(guild, member, perm_array):
                     
         return True if found_num >= to_have else False
 
+def has_roles(member, role_array):
+    has_them = True
+    if not has_permissions(member, ["administrator"]):
+        for role in role_array:
+            if not role in member.roles:
+                has_them = False
+                break
+    return has_them
+    
 def user_position(user):
     pos=0
     for r in user.roles:
@@ -623,31 +651,59 @@ def lack_of_perms_msg(perm_name_list):
     )
     return reply
     
+def paral_sort(names, values):
+    length = len(values)
+    for i in range(length):
+        max_val = values[i]
+        max_ind = i
+        for j in range(i, length):
+            if values[j] > max_val:
+                max_val = values[j]
+                max_ind = j
+        max_name = names[max_ind]
+        names[max_ind] = names[i]
+        names[i] = max_name
+        values[max_ind] = values[i]
+        values[i] = max_val
+    return (names, values)
+
 class detect:
-    #===========DEF=========
+    #===========DEF=========я 
     def role(guild, raw_search):
-        out="Error"
-        for r in guild.roles:
-            if raw_search==f"<@&{r.id}>" or raw_search==str(r.id):
-                out=r
-                break
-        return out
+        IDs = all_ints(raw_search)
+        if IDs == []:
+            r = discord.utils.get(guild.roles, name = raw_search)
+        else:
+            ID = IDs[0]
+            r = discord.utils.get(guild.roles, id = ID)
+        if r == None:
+            return "Error"
+        else:
+            return r
     
     def channel(guild, raw_search):
-        out="Error"
-        for channel in guild.channels:
-            if raw_search==f"<#{channel.id}>" or raw_search==str(channel.id):
-                out=channel
-                break
-        return out
+        IDs = all_ints(raw_search)
+        if IDs == []:
+            c = discord.utils.get(guild.channels, name = raw_search)
+        else:
+            ID = IDs[0]
+            c = discord.utils.get(guild.channels, id = ID)
+        if c == None:
+            return "Error"
+        else:
+            return c
     
     def member(guild, raw_search):
-        status="Error"
-        for m in guild.members:
-            if raw_search==f"<@!{m.id}>" or raw_search==str(m.id) or raw_search==f"<@{m.id}>":
-                status=m
-                break
-        return status
+        IDs = all_ints(raw_search)
+        if IDs == []:
+            m = None
+        else:
+            ID = IDs[0]
+            m = discord.utils.get(guild.members, id = ID)
+        if m == None:
+            return "Error"
+        else:
+            return m
     
     def emoji(guild, raw_search):
         out="Error"
@@ -1104,8 +1160,7 @@ async def warn_review(guild, member):
         
         client.loop.create_task(do_action.tempban(guild, member, client.user, 3600 * 24, "набрал 5 или более варнов"))
         await post_log(guild, ban_case)
-        
-    
+
 class do_action:
     async def mute(guild, member, moderator, sec, reason = "не указана"):
         global mute_role_name
@@ -1114,7 +1169,7 @@ class do_action:
         if Mute==None:
             await setup_mute(guild)
             Mute = discord.utils.get(guild.roles, name=mute_role_name)
-        if not has_permissions(guild, member, ["manage_messages"]):
+        if not has_permissions(member, ["manage_messages"]):
             await member.add_roles(Mute)
             await save_task("mute", guild, member, sec)
             
@@ -1235,7 +1290,6 @@ class withdraw:
 #=============Commands=============
 @client.command()
 async def help(ctx, cmd_name=None):
-    global prefix
     p=prefix
     if cmd_name==None:
         adm_help_list1=(f"1) **{p}mute [**Участник**] [**Время**] <**Причина**>**\n"
@@ -1257,7 +1311,11 @@ async def help(ctx, cmd_name=None):
         adm_help_list2=(f"17) **{p}reaction_roles <**Заголовок**>** - *начинает создание вывески с раздачей ролей за реакции*\n"
                         f"18) **{p}set_leave [**Раздел**] [**Аргумент / delete**]** - ***{p}help set_leave** для подробностей*\n"
                         f"19) **{p}save** - *сохраняет сервер, чтобы его можно было восстановить*\n"
-                        f"20) **{p}backup <**ID сервера**>**\n")
+                        f"20) **{p}backup <**ID сервера**>**\n"
+                        f"21) **{p}add_tokens [**Участник**] [**Кол-во**]** - *добавляет токены участнику*\n"
+                        f"22) **{p}remove_tokens [**Участник**] [**Кол-во**]**\n"
+                        f"23) **{p}set_token [**Эмодзи**]** - *настраивает валюту*\n"
+                        f"24) **{p}auto_pay_role [**Со скольки токенов давать**] [**Роль**]** - *настраивает авто-роль за токены*")
         user_help_list=(f"1) **{p}search [**Запрос/ID**]**\n"
                         f"2) **{p}warns [**Участник**]** - *варны участника*\n"
                         f"3) **{p}server_warns** - *все участники с варнами*\n"
@@ -1265,7 +1323,9 @@ async def help(ctx, cmd_name=None):
                         f"5) **{p}altshift [**Текст**]** - *переключает раскладку для написанного текста*\n"
                         f"6) **{p}avatar <**Пользователь**>** - *рассмотреть свою/чужую аватарку*\n"
                         f"7) **{p}set_giveaway** - *начинает настройку розыгрыша*\n"
-                        f"8) **{p}bannahoy [**Пользователь/ID**] <**Модератор**> <**Причина**>**\n")
+                        f"8) **{p}bannahoy [**Пользователь/ID**] <**Модератор**> <**Причина**>**\n"
+                        f"9) **{p}bal <**Участник**>** - *проверить баланс*\n"
+                        f"10) **{p}top <**Страница**>** - *топ участников*\n")
         
         help_msg=discord.Embed(
             title="Help menu",
@@ -1339,7 +1399,7 @@ async def help(ctx, cmd_name=None):
 
 @client.command()
 async def set_log_channel(ctx, raw_channel):
-    if not has_permissions(ctx.guild, ctx.author, ["manage_channels"]):
+    if not has_permissions(ctx.author, ["manage_channels"]):
         reply = lack_of_perms_msg(["Управлять каналами"])
         await ctx.send(embed = reply)
     else:
@@ -1357,7 +1417,7 @@ async def set_log_channel(ctx, raw_channel):
 
 @client.command()
 async def remove_log_channel(ctx, raw_channel):
-    if not has_permissions(ctx.guild, ctx.author, ["manage_channels"]):
+    if not has_permissions(ctx.author, ["manage_channels"]):
         reply = lack_of_perms_msg(["Управлять каналами"])
         await ctx.send(embed = reply)
     else:
@@ -1379,7 +1439,7 @@ async def mute(ctx, raw_user, raw_time, *, reason="не указана"):
     bot_user = to_member(ctx.guild, client.user.id)
     Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
-    if not has_permissions(ctx.guild, ctx.author, ["manage_messages"]):
+    if not has_permissions(ctx.author, ["manage_messages"]):
         reply = lack_of_perms_msg(["Управлять сообщениями"])
         await ctx.send(embed = reply)
         
@@ -1459,7 +1519,7 @@ async def unmute(ctx, raw_user):
     bot_user = to_member(ctx.guild, client.user.id)
     Mute = discord.utils.get(ctx.author.guild.roles, name=mute_role_name)
     
-    if not has_permissions(ctx.guild, ctx.author, ["manage_messages"]):
+    if not has_permissions(ctx.author, ["manage_messages"]):
         reply = lack_of_perms_msg(["Управлять сообщениями"])
         await ctx.send(embed = reply)
     
@@ -1534,7 +1594,7 @@ async def black(ctx):
 async def kick(ctx, raw_user, *, reason="не указана"):
     bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     
-    if not has_permissions(ctx.guild, ctx.author, ["kick_members"]):
+    if not has_permissions(ctx.author, ["kick_members"]):
         reply = lack_of_perms_msg(["Кикать участников"])
         await ctx.send(embed=reply)
     else:
@@ -1583,7 +1643,7 @@ async def kick(ctx, raw_user, *, reason="не указана"):
 async def ban(ctx, raw_user, *, reason="не указана"):
     bot_user = to_member(ctx.guild, client.user.id)
     
-    if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
+    if not has_permissions(ctx.author, ["ban_members"]):
         reply = lack_of_perms_msg(["Банить участников"])
         await ctx.send(embed=reply)
     else:
@@ -1634,7 +1694,7 @@ async def ban(ctx, raw_user, *, reason="не указана"):
 
 @client.command()
 async def unban(ctx, *, member=None):
-    if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
+    if not has_permissions(ctx.author, ["ban_members"]):
         reply = lack_of_perms_msg(["Банить участников"])
         await ctx.send(embed=reply)
     else:
@@ -1681,7 +1741,7 @@ async def unban(ctx, *, member=None):
 async def tempban(ctx, raw_user, raw_time, *, reason = "не указана"):
     bot_user = to_member(ctx.guild, client.user.id)
     
-    if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
+    if not has_permissions(ctx.author, ["ban_members"]):
         reply = lack_of_perms_msg(["Банить участников"])
         await ctx.send(embed = reply)
     else:
@@ -1762,7 +1822,7 @@ async def tempban(ctx, raw_user, raw_time, *, reason = "не указана"):
     
 @client.command()
 async def set_mute_role(ctx):
-    if not has_permissions(ctx.guild, ctx.author, ["manage_channels"]):
+    if not has_permissions(ctx.author, ["manage_channels"]):
         reply = lack_of_perms_msg(["Управлять каналами"])
         await ctx.send(embed = reply)
     else:
@@ -1825,7 +1885,7 @@ async def search(ctx, raw_request):
 @commands.cooldown(1, 5, commands.BucketType.member)
 @client.command()
 async def warn(ctx, raw_user, *, reason="не указана"):
-    if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
+    if not has_permissions(ctx.author, ["ban_members"]):
         reply = lack_of_perms_msg(["Банить участников"])
         await ctx.send(embed=reply)
     else:
@@ -1939,7 +1999,7 @@ async def server_warns(ctx):
     
 @client.command()
 async def clean_warns(ctx, raw_user):
-    if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
+    if not has_permissions(ctx.author, ["ban_members"]):
         reply = lack_of_perms_msg(["Банить участников"])
         await ctx.send(embed=reply)
     else:
@@ -1982,7 +2042,7 @@ async def clean_warns(ctx, raw_user):
     
 @client.command()
 async def clean_warn(ctx, raw_user, num):
-    if not has_permissions(ctx.guild, ctx.author, ["ban_members"]):
+    if not has_permissions(ctx.author, ["ban_members"]):
         reply = lack_of_perms_msg(["Банить участников"])
         await ctx.send(embed=reply)
     else:
@@ -2046,7 +2106,7 @@ async def clean_warn(ctx, raw_user, num):
     
 @client.command(aliases=['clear','del'])
 async def clean(ctx, n="1"):
-    if has_permissions(ctx.guild, ctx.author, ["manage_messages"]):
+    if has_permissions(ctx.author, ["manage_messages"]):
         if not number(n):
             reply=discord.Embed(
                 title='❌Неверно введено кол-во сообщений',
@@ -2130,7 +2190,7 @@ async def embed(ctx, *, raw_text):
     if mode.lower()!="edit":
         await ctx.send(embed=msg)
     else:
-        if not has_permissions(ctx.guild, ctx.author, ["manage_messages"]):
+        if not has_permissions(ctx.author, ["manage_messages"]):
             wrong_syntax=True
             reply=discord.Embed(title="Ошибка", description="Недостаточно прав")
             await ctx.send(embed=reply)
@@ -2161,10 +2221,9 @@ async def embed(ctx, *, raw_text):
 
 @client.command()
 async def set_welcome(ctx, categ, *, text="None"):
-    global prefix
     bot_user = to_member(ctx.guild, client.user.id)
     
-    if not has_permissions(ctx.guild, ctx.author, ["administrator"]):
+    if not has_permissions(ctx.author, ["administrator"]):
         reply = lack_of_perms_msg(["Администратор"])
         await ctx.send(embed=reply)
         
@@ -2390,10 +2449,10 @@ async def welcome_info(ctx):
 
 @client.command()
 async def set_leave(ctx, categ, *, text="None"):
-    global prefix
+    
     bot_user=discord.utils.get(ctx.guild.members, id=client.user.id)
     
-    if not has_permissions(ctx.guild, ctx.author, ["administrator"]):
+    if not has_permissions(ctx.author, ["administrator"]):
         reply = lack_of_perms_msg(["Администратор"])
         await ctx.send(embed=reply)
         
@@ -2490,9 +2549,9 @@ async def set_leave(ctx, categ, *, text="None"):
 
 @client.command(aliases=["rr"])
 async def reaction_roles(ctx, *, heading="Получите роли"):
-    global prefix
     
-    if not has_permissions(ctx.guild, ctx.author, ["administrator"]):
+    
+    if not has_permissions(ctx.author, ["administrator"]):
         reply = lack_of_perms_msg(["Администратор"])
         await ctx.send(embed=reply)
     else:
@@ -2614,7 +2673,7 @@ async def reaction_roles(ctx, *, heading="Получите роли"):
     
 @client.command(aliases=["as", "translit", "t"])
 async def altshift(ctx, *, text=None):
-    global prefix
+    
     if text==None:
         reply=discord.Embed(
             title="Введите текст",
@@ -2666,7 +2725,7 @@ async def avatar(ctx, *, raw_user=None):
     
 @client.command(aliases=["sg", "gcreate", "create"])
 async def set_giveaway(ctx):
-    global prefix
+    
     
     channel="Error"
     lets_start=discord.Embed(
@@ -2827,7 +2886,7 @@ async def set_giveaway(ctx):
 
 @client.command()
 async def save(ctx):
-    global prefix
+    
     if ctx.author.id != ctx.guild.owner_id and ctx.author.id != 301295716066787332:
         reply = discord.Embed(
             title = "Только для создателя сервера",
@@ -3064,7 +3123,7 @@ async def msg(ctx, *, text="None"): #new
 
 @client.command()
 async def antispam(ctx, mode = "o"):
-    if not has_permissions(ctx.guild, ctx.author, ["administrator"]):
+    if not has_permissions(ctx.author, ["administrator"]):
         reply = lack_of_perms_msg(["Администратор"])
         await ctx.send(embed = reply)
     else:
@@ -3111,6 +3170,259 @@ async def antispam(ctx, mode = "o"):
                 reply = discord.Embed(
                     title = f"💾 Антиспам {names[mode]}")
                 await ctx.send(embed = reply)
+    
+#=============Token commands=========
+@client.command(aliases = ["bal"])
+async def balance(ctx, u_search = None):
+    if u_search == None:
+        member = ctx.author
+    else:
+        member = detect.member(ctx.guild, u_search)
+    if member == "Error":
+        reply = discord.Embed(
+            title = "💢 Пользователь не найден",
+            description = f"Вы ввели {u_search}, подразумевая участника сервера, но он не был найден"
+        )
+        reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+        await ctx.send(embed = reply)
+    else:
+        token_emoji = await get_token(ctx.guild)
+        
+        results = await get_data("balances", [str(ctx.guild.id), str(member.id)])
+        if results == "Error":
+            tokens = 0
+        else:
+            data = results[0]
+            tokens = int(data[0])
+            
+        bal_embed = discord.Embed(
+            title = f"Баланс {member}",
+            description = f"{tokens} {token_emoji}",
+            color = discord.Color.teal()
+        )
+        bal_embed.set_thumbnail(url = member.avatar_url)
+        
+        await ctx.send(embed = bal_embed)
+        
+@client.command()
+async def set_token(ctx, raw_emoji):
+    if not has_permissions(ctx.author, ["administrator"]):
+        reply = lack_of_perms_msg(["Администратор"])
+        reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+        await ctx.send(embed = reply)
+    else:
+        emoji = detect.emoji(ctx.guild, raw_emoji)
+        if emoji == "Error":
+            reply = discord.Embed(
+                title = "❌ Ошибка",
+                description = f"{raw_emoji} не является эмодзи сервера или юникод-эмодзи"
+            )
+            await ctx.send(embed = reply)
+        else:
+            data = [ctx.guild.id, emoji]
+            
+            await post_data("token-emojis", data)
+            reply = discord.Embed(
+                title = "✅ Настроено",
+                description = f"Значок токена успешно настроен как {emoji}",
+                color = discord.Color.green()
+            )
+            await ctx.send(embed = reply)
+
+@client.command(aliases = ["add_money", "addmoney", "addtokens", "addm", "addt"])
+async def add_tokens(ctx, u_search, amount):
+    seller_id = 635432513753579541
+    seller = discord.utils.get(ctx.guild.roles, id = seller_id)
+    
+    if not has_roles(ctx.author, [seller]):
+        reply = lack_of_perms_msg([f"Иметь роль <@&{seller_id}> или быть администратором"])
+        reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+        await ctx.send(embed = reply)
+    else:
+        if u_search == None:
+            member = ctx.author
+        else:
+            member = detect.member(ctx.guild, u_search)
+        if member == "Error":
+            reply = discord.Embed(
+                title = "💢 Пользователь не найден",
+                description = f"Вы ввели {u_search}, подразумевая участника сервера, но он не был найден"
+            )
+            reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+            await ctx.send(embed = reply)
+        else:
+            if not number(amount):
+                reply = discord.Embed(
+                    title = "💢 Ошибка",
+                    description = f"{amount} должно быть целым числом"
+                )
+                reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+                await ctx.send(embed = reply)
+            else:
+                amount = int(amount)
+                files = await get_raw_data("balances", [str(ctx.guild.id), str(member.id)])
+                if files == "Error":
+                    new_bal = amount
+                    await post_data("balances", [ctx.guild.id, member.id, amount])
+                else:
+                    file = files[0]
+                    data = to_list(file.content)
+                    new_bal = int(data[0]) + amount
+                    
+                    data = [ctx.guild.id, member.id, new_bal]
+                    raw_data = to_raw(data)
+                    await file.edit(content = raw_data)
+                    
+                reply = discord.Embed(
+                    title = "✅ Начислено",
+                    description = f"Пользователю {member} добавлено {amount} токенов",
+                    color = discord.Color.green()
+                )
+                await ctx.send(embed = reply)
+                
+                await role_review(member, new_bal)
+
+@client.command(aliases = ["remove_money", "removemoney", "removetokens", "remm", "remt"])
+async def remove_tokens(ctx, u_search, amount):
+    seller_id = 635432513753579541
+    seller = discord.utils.get(ctx.guild.roles, id = seller_id)
+    
+    if not has_roles(ctx.author, [seller]):
+        reply = lack_of_perms_msg([f"Иметь роль <@&{seller_id}> или быть администратором"])
+        reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+        await ctx.send(embed = reply)
+    else:
+        if u_search == None:
+            member = ctx.author
+        else:
+            member = detect.member(ctx.guild, u_search)
+        if member == "Error":
+            reply = discord.Embed(
+                title = "💢 Пользователь не найден",
+                description = f"Вы ввели {u_search}, подразумевая участника сервера, но он не был найден"
+            )
+            reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+            await ctx.send(embed = reply)
+        else:
+            if not number(amount):
+                reply = discord.Embed(
+                    title = "💢 Ошибка",
+                    description = f"{amount} должно быть целым числом"
+                )
+                reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+                await ctx.send(embed = reply)
+            else:
+                amount = 0-int(amount)
+                files = await get_raw_data("balances", [str(ctx.guild.id), str(member.id)])
+                if files == "Error":
+                    new_bal = amount
+                    await post_data("balances", [ctx.guild.id, member.id, amount])
+                else:
+                    file = files[0]
+                    data = to_list(file.content)
+                    new_bal = int(data[0]) + amount
+                    
+                    data = [ctx.guild.id, member.id, new_bal]
+                    raw_data = to_raw(data)
+                    await file.edit(content = raw_data)
+                    
+                reply = discord.Embed(
+                    title = "✅ Списано",
+                    description = f"У пользователя {member} теперь на {-amount} токенов меньше",
+                    color = discord.Color.green()
+                )
+                await ctx.send(embed = reply)
+                
+                await role_review(member, new_bal)
+
+@client.command(aliases = ["leaderboard", "lb"])
+async def top(ctx, page = "1"):
+    interval = 10
+    
+    if not number(page):
+        reply = discord.Embed(
+            title = "💢 Ошибка",
+            description = f"{page} должно быть целым числом"
+        )
+        reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+        await ctx.send(embed = reply)
+    else:
+        page = int(page)
+        balances = await get_data("balances", [str(ctx.guild.id)])
+        
+        if balances == "Error":
+            top_msg = discord.Embed(
+                title = "📊 Топ участников",
+                description = "Пуст",
+                color = discord.Color.magenta()
+            )
+            await ctx.send(embed = top_msg)
+        else:
+            token = await get_token(ctx.guild)
+            
+            top_msg = discord.Embed(
+                title = "📊 Топ участников",
+                color = discord.Color.magenta()
+            )
+            
+            IDs = [int(twin[0]) for twin in balances]
+            bals = [int(twin[1]) for twin in balances]
+            
+            pairs = paral_sort(IDs, bals)
+            users = pairs[0]
+            bals = pairs[1]
+            
+            page_num = pages(len(users), interval)
+            
+            if page < 1 or page > page_num:
+                reply = discord.Embed(
+                    title = "💢 Не найдена страница",
+                    description = f"Максимальный номер страницы: {page_num}"
+                )
+                reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+                await ctx.send(embed = reply)
+            else:
+                i = (page-1)*interval
+                puncts = 0
+                while puncts < interval and i < len(users):
+                    puncts += 1
+                    user = discord.utils.get(ctx.guild.members, id = users[i])
+                    top_msg.add_field(name = f"**{i+1})** {user}", value = f"{bals[i]} {token}", inline = False)
+                    i += 1
+                top_msg.set_footer(text = f"Page {page}/{page_num}")
+                await ctx.send(embed = top_msg)
+
+@client.command(aliases = ["apr"])
+async def auto_pay_role(ctx, req_tokens, r_search):
+    if not has_permissions(ctx.author, ["administrator"]):
+        reply = lack_of_perms_msg(["Администратор"])
+        reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+        await ctx.send(embed = reply)
+    elif not number(req_tokens):
+        reply = discord.Embed(
+            title = "💢 Ошибка",
+            description = f"{req_tokens} должно быть целым числом"
+        )
+        reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+        await ctx.send(embed = reply)
+    else:
+        role = detect.role(ctx.guild, r_search)
+        if role == "Error":
+            reply = discord.Embed(
+                title = "💢 Ошибка",
+                description = f"Вы ввели {r_search}, подразумевая роль, но она не была найдена"
+            )
+            reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+            await ctx.send(embed = reply)
+        else:
+            await post_data("auto-pay-roles", [ctx.guild.id, req_tokens, role.id])
+            reply = discord.Embed(
+                title = "✅ Настроено",
+                description = f"Роль <@&{role.id}> теперь будет даваться тем, у кого {req_tokens}+ токенов",
+                color = discord.Color.green()
+            )
+            reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+            await ctx.send(embed = reply)
     
 #===================Events==================
 @client.event
@@ -3217,7 +3529,7 @@ async def on_message(message):
 #=====================Errors==========================
 @mute.error
 async def mute_error(ctx, error):
-    global prefix
+    
     if isinstance(error, commands.MissingRequiredArgument):
         reply=discord.Embed(
             title="❌Недостаточно аргументов",
@@ -3229,7 +3541,7 @@ async def mute_error(ctx, error):
 
 @unmute.error
 async def unmute_error(ctx, error):
-    global prefix
+    
     if isinstance(error, commands.MissingRequiredArgument):
         reply=discord.Embed(
             title="❌Недостаточно аргументов",
@@ -3240,7 +3552,7 @@ async def unmute_error(ctx, error):
         
 @kick.error
 async def kick_error(ctx, error):
-    global prefix
+    
     if isinstance(error, commands.MissingRequiredArgument):
         Miss=discord.Embed(
             title=':hourglass: Недостаточно аргументов :hourglass:',
@@ -3251,7 +3563,7 @@ async def kick_error(ctx, error):
         await ctx.send(embed=Miss)
 @ban.error
 async def ban_error(ctx, error):
-    global prefix
+    
     if isinstance(error, commands.MissingRequiredArgument):
         Miss=discord.Embed(
             title=':hourglass: Недостаточно аргументов :hourglass:',
@@ -3263,7 +3575,7 @@ async def ban_error(ctx, error):
 
 @set_log_channel.error
 async def set_log_channel_error(ctx, error):
-    global prefix
+    
     if isinstance(error, commands.MissingRequiredArgument):
         Miss=discord.Embed(
             title=':hourglass: Недостаточно аргументов :hourglass:',
@@ -3275,7 +3587,7 @@ async def set_log_channel_error(ctx, error):
         
 @remove_log_channel.error
 async def remove_log_channel_error(ctx, error):
-    global prefix
+    
     if isinstance(error, commands.MissingRequiredArgument):
         Miss=discord.Embed(
             title=':hourglass: Недостаточно аргументов :hourglass:',
@@ -3287,7 +3599,7 @@ async def remove_log_channel_error(ctx, error):
 
 @tempban.error
 async def tempban_error(ctx, error):
-    global prefix
+    
     if isinstance(error, commands.MissingRequiredArgument):
         reply=discord.Embed(
             title="❌Недостаточно аргументов",
@@ -3299,7 +3611,7 @@ async def tempban_error(ctx, error):
 
 @clean_warn.error
 async def clean_warn_error(ctx, error):
-    global prefix
+    
     if isinstance(error, commands.MissingRequiredArgument):
         reply=discord.Embed(
             title="❌Недостаточно аргументов",
@@ -3324,6 +3636,51 @@ async def warn_error(ctx, error):
                 description = f"Не торопитесь с варнами, осталось **{TimeExpand(int(error.retry_after))}**"
             )
         await ctx.send(embed=cool_notify)    
+#=
+@set_token.error
+async def set_token_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        reply=discord.Embed(
+            title="❌Недостаточно аргументов",
+            description=(f"Формат: **{prefix}set_token [**Эмодзи**]**\n"
+                         f"Например: **{prefix}set_token 💰**"),
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+
+@add_tokens.error
+async def add_tokens_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        reply=discord.Embed(
+            title="❌Недостаточно аргументов",
+            description=(f"Формат: **{prefix}add_tokens [**Участник**] [**Кол-во**]**\n"
+                         f"Например: **{prefix}add_tokens @Player#0000 1**"),
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+
+@remove_tokens.error
+async def remove_tokens_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        reply=discord.Embed(
+            title="❌Недостаточно аргументов",
+            description=(f"Формат: **{prefix}remove_tokens [**Участник**] [**Кол-во**]**\n"
+                         f"Например: **{prefix}remove_tokens @Player#0000 1**"),
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+
+@auto_pay_role.error
+async def auto_pay_role_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        reply=discord.Embed(
+            title="❌Недостаточно аргументов",
+            description=(f"Формат: **{prefix}auto_pay_role [**Со скольки токенов выдавать**] [**Роль**]**\n"
+                         f"Например: **{prefix}auto_pay_role 2 @Роль**"),
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+
 #===========Tasks=========
 async def task_refresh():
     await client.wait_until_ready()
