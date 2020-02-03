@@ -153,8 +153,22 @@ async def role_review(member, bal):
                 role = discord.utils.get(member.guild.roles, id = role_id)
                 if role == None:
                     await file.delete()
-                else:
+                elif not role in member.roles:
                     await member.add_roles(role)
+    
+    files = await get_raw_data("auto-remove-roles", [str(member.guild.id)])
+    if files != "Error":
+        for file in files:
+            result = to_list(file.content)
+            req_tokens = int(result[1])
+            if bal >= req_tokens:
+                role_id = int(result[2])
+                role = discord.utils.get(member.guild.roles, id = role_id)
+                if role == None:
+                    await file.delete()
+                elif role in member.roles:
+                    await member.remove_roles(role)
+    return
     
 #========Database Minor tools=======
 def to_raw(data_list):
@@ -1322,7 +1336,9 @@ async def help(ctx, cmd_name=None):
                         f"21) **{p}add_tokens [**Участник**] [**Кол-во**]** - *добавляет токены участнику*\n"
                         f"22) **{p}remove_tokens [**Участник**] [**Кол-во**]**\n"
                         f"23) **{p}set_token [**Эмодзи**]** - *настраивает валюту*\n"
-                        f"24) **{p}auto_pay_role [**Со скольки токенов давать**] [**Роль**]** - *настраивает авто-роль за токены*")
+                        f"24) **{p}auto_pay_role [**Со скольки токенов давать / delete**] [**Роль**]** - *настраивает авто-роль за токены*\n"
+                        f"25) **{p}auto_remove_role [**Со скольки токенов снимать / delete**] [**Роль**]** - *настраивает авто снятие роли за токены*\n"
+                        f"26) **{p}auto_role_info** - *список настроенных ролей*\n")
         user_help_list=(f"1) **{p}search [**Запрос/ID**]**\n"
                         f"2) **{p}warns [**Участник**]** - *варны участника*\n"
                         f"3) **{p}server_warns** - *все участники с варнами*\n"
@@ -3459,6 +3475,95 @@ async def auto_pay_role(ctx, req_tokens, r_search):
             reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
             await ctx.send(embed = reply)
     
+@client.command(aliases = ["arr"])
+async def auto_remove_role(ctx, req_tokens, r_search):
+    if not has_permissions(ctx.author, ["administrator"]):
+        reply = lack_of_perms_msg(["Администратор"])
+        reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+        await ctx.send(embed = reply)
+    elif req_tokens.lower() == "delete":
+        IDs = all_ints(r_search)
+        if IDs == []:
+            str_ID = "wrong_id"
+        else:
+            str_ID = f"{IDs[0]}"
+        files = await get_raw_data("auto-remove-roles", [str(ctx.guild.id), "None", str_ID])
+        if files == "Error":
+            reply = discord.Embed(
+                title = "💢 Ошибка",
+                description = f"По запросу {r_search} не найдено настроенной роли"
+            )
+            reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+            await ctx.send(embed = reply)
+        else:
+            for file in files:
+                client.loop.create_task(do_delete(file))
+            reply = discord.Embed(
+                title = "✅ Выполнено",
+                description = f"Указанные роли больше не будут сниматься автоматически",
+                color = discord.Color.green()
+            )
+            reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+            await ctx.send(embed = reply)
+            
+    elif not number(req_tokens):
+        reply = discord.Embed(
+            title = "💢 Ошибка",
+            description = f"{req_tokens} должно быть целым числом или словом **delete**, если Вы хотите убрать роль с авто-снятия"
+        )
+        reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+        await ctx.send(embed = reply)
+    else:
+        role = detect.role(ctx.guild, r_search)
+        if role == "Error":
+            reply = discord.Embed(
+                title = "💢 Ошибка",
+                description = f"Вы ввели {r_search}, подразумевая роль, но она не была найдена"
+            )
+            reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+            await ctx.send(embed = reply)
+        else:
+            await post_data("auto-remove-roles", [ctx.guild.id, req_tokens, role.id])
+            reply = discord.Embed(
+                title = "✅ Настроено",
+                description = f"Роль <@&{role.id}> теперь будет сниматься с тех, у кого {req_tokens}+ токенов",
+                color = discord.Color.green()
+            )
+            reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+            await ctx.send(embed = reply)
+    
+@client.command(aliases = ["ari"])
+async def auto_role_info(ctx):
+    add_results = await get_data("auto-pay-roles", [str(ctx.guild.id)])
+    rem_results = await get_data("auto-remove-roles", [str(ctx.guild.id)])
+    
+    token_emoji = await get_token(ctx.guild)
+    
+    add_desc = ""
+    for result in add_results:
+        req_tok = result[0]
+        role_id = result[1]
+        add_desc += f"-> <@&{role_id}> • {req_tok}+ {token_emoji}\n"
+        
+    rem_desc = ""
+    for result in rem_results:
+        req_tok = result[0]
+        role_id = result[1]
+        rem_desc += f"<- <@&{role_id}> • {req_tok}+ {token_emoji}\n"
+    
+    if add_desc == "":
+        add_desc = "Не настроено"
+    if rem_desc == "":
+        rem_desc = "Не настроено"
+    
+    screen = discord.Embed(
+        title = "📑 Настроенные роли",
+        description = (f"**Выдаются:**\n{add_desc}\n"
+                       f"**Снимаются:**\n{rem_desc}\n"),
+        color = discord.Color.blue()
+    )
+    await ctx.send(embed = screen)
+    
 #===================Events==================
 @client.event
 async def on_member_join(member):
@@ -3710,8 +3815,21 @@ async def auto_pay_role_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         reply=discord.Embed(
             title="❌Недостаточно аргументов",
-            description=(f"Формат: **{prefix}auto_pay_role [**Со скольки токенов выдавать**] [**Роль**]**\n"
-                         f"Например: **{prefix}auto_pay_role 2 @Роль**"),
+            description=(f"Формат: **{prefix}auto_pay_role [**Со скольки токенов выдавать / delete**] [**Роль**]**\n"
+                         f"Например: **{prefix}auto_pay_role 2 @Роль**\n"
+                         f"Удалить: **{prefix}auto_pay_role delete @Роль**"),
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=reply)
+
+@auto_remove_role.error
+async def auto_remove_role_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        reply=discord.Embed(
+            title="❌Недостаточно аргументов",
+            description=(f"Формат: **{prefix}auto_remove_role [**Со скольки токенов выдавать \ delete**] [**Роль**]**\n"
+                         f"Например: **{prefix}auto_remove_role 2 @Роль**\n"
+                         f"Удалить: **{prefix}auto_remove_role delete @Роль**"),
             color=discord.Color.red()
         )
         await ctx.send(embed=reply)
