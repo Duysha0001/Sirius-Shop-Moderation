@@ -1161,6 +1161,13 @@ async def warn_review(guild, member):
         client.loop.create_task(do_action.tempban(guild, member, client.user, 3600 * 24, "набрал 5 или более варнов"))
         await post_log(guild, ban_case)
 
+async def do_delete(obj):
+    try:
+        await obj.delete()
+    except Exception:
+        pass
+    return
+    
 class do_action:
     async def mute(guild, member, moderator, sec, reason = "не указана"):
         global mute_role_name
@@ -1836,7 +1843,8 @@ async def set_mute_role(ctx):
         await ctx.send(embed=log)
     
 @client.command()
-async def search(ctx, raw_request):
+async def search(ctx, *, raw_request):
+    raw_request = raw_request.lower()
     if number(raw_request) and len(raw_request)==18:
         for m in ctx.guild.members:
             if str(m.id)==raw_request:
@@ -1856,22 +1864,20 @@ async def search(ctx, raw_request):
     else:
         out=[]
         for m in ctx.guild.members:
-            user_simil=word_compare(raw_request, str(m))
+            user_simil = word_compare(raw_request, str(m).lower())
             
-            server_name=str(m.nick)
-            if server_name=="None":
-                server_name=m.name
+            member_simil_1 = word_compare(raw_request, str(m.name).lower())
+            member_simil_2 = word_compare(raw_request, str(m.nick).lower())
+            member_simil = max(member_simil_1, member_simil_2)
             
-            member_simil=word_compare(raw_request, server_name)
-            
-            if user_simil>=0.5 or member_simil>=0.5:
-                out.append(int(m.id))
+            if user_simil>=0.8 or member_simil>=0.5:
+                out.append(m.id)
             if len(out)>24:
                 break
         desc=""
         for i in range(len(out)):
             res=discord.utils.get(ctx.guild.members, id=out[i])
-            res_data=f"{res.mention} ({res}); **ID:** {res.id}\n"
+            res_data=f"{res} (<@!{res.id}>); **ID:** {res.id}\n"
             desc+=res_data
         if desc=="":
             desc="Нет результатов"
@@ -3219,9 +3225,13 @@ async def set_token(ctx, raw_emoji):
             )
             await ctx.send(embed = reply)
         else:
+            files = await get_raw_data("token-emojis", [str(ctx.guild)])
             data = [ctx.guild.id, emoji]
-            
-            await post_data("token-emojis", data)
+            if files == "Error":
+                await post_data("token-emojis", data)
+            else:
+                file = files[0]
+                await file.edit(content = to_raw(data))
             reply = discord.Embed(
                 title = "✅ Настроено",
                 description = f"Значок токена успешно настроен как {emoji}",
@@ -3267,7 +3277,7 @@ async def add_tokens(ctx, u_search, amount):
                 else:
                     file = files[0]
                     data = to_list(file.content)
-                    new_bal = int(data[0]) + amount
+                    new_bal = int(data[2]) + amount
                     
                     data = [ctx.guild.id, member.id, new_bal]
                     raw_data = to_raw(data)
@@ -3320,7 +3330,7 @@ async def remove_tokens(ctx, u_search, amount):
                 else:
                     file = files[0]
                     data = to_list(file.content)
-                    new_bal = int(data[0]) + amount
+                    new_bal = int(data[2]) + amount
                     
                     data = [ctx.guild.id, member.id, new_bal]
                     raw_data = to_raw(data)
@@ -3398,10 +3408,35 @@ async def auto_pay_role(ctx, req_tokens, r_search):
         reply = lack_of_perms_msg(["Администратор"])
         reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
         await ctx.send(embed = reply)
+    elif req_tokens.lower() == "delete":
+        IDs = all_ints(r_search)
+        if IDs == []:
+            str_ID = "wrong_id"
+        else:
+            str_ID = f"{IDs[0]}"
+        files = await get_raw_data("auto-pay-roles", [str(ctx.guild.id), "None", str_ID])
+        if files == "Error":
+            reply = discord.Embed(
+                title = "💢 Ошибка",
+                description = f"По запросу {r_search} не найдено настроенной роли"
+            )
+            reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+            await ctx.send(embed = reply)
+        else:
+            for file in files:
+                client.loop.create_task(do_delete(file))
+            reply = discord.Embed(
+                title = "✅ Выполнено",
+                description = f"Указанные роли больше не будут выдаваться автоматически",
+                color = discord.Color.green()
+            )
+            reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
+            await ctx.send(embed = reply)
+            
     elif not number(req_tokens):
         reply = discord.Embed(
             title = "💢 Ошибка",
-            description = f"{req_tokens} должно быть целым числом"
+            description = f"{req_tokens} должно быть целым числом или словом **delete**, если Вы хотите убрать роль с авто-выдачи"
         )
         reply.set_footer(text = f"{ctx.author}", icon_url = ctx.author.avatar_url)
         await ctx.send(embed = reply)
@@ -3704,10 +3739,19 @@ async def task_refresh():
                     await post_log(guild, log)
                 
             elif case[0]=="ban":
+                unbanned = None
+                banned_users = await guild.bans()
+                for ban_entry in banned_users:
+                    banned = ban_entry.user
+                    if banned.id == int(case[2]):
+                        unbanned = banned
+                        break
+                
                 was_banned = await withdraw.ban(case[1], case[2])
+                
                 if was_banned:
                     log=discord.Embed(
-                        title=f"{member} был разбанен",
+                        title=f"{unbanned} был разбанен",
                         description = (f"**Модератор:** {client.user} ({client.user.mention})\n"
                                        "**Причина:** истёк срок временного бана"),
                         color=discord.Color.dark_green()
