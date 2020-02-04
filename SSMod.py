@@ -3241,7 +3241,7 @@ async def set_token(ctx, raw_emoji):
             )
             await ctx.send(embed = reply)
         else:
-            files = await get_raw_data("token-emojis", [str(ctx.guild)])
+            files = await get_raw_data("token-emojis", [str(ctx.guild.id)])
             data = [ctx.guild.id, emoji]
             if files == "Error":
                 await post_data("token-emojis", data)
