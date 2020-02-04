@@ -3386,11 +3386,6 @@ async def top(ctx, page = "1"):
         else:
             token = await get_token(ctx.guild)
             
-            top_msg = discord.Embed(
-                title = "📊 Топ участников",
-                color = discord.Color.magenta()
-            )
-            
             IDs = [int(twin[0]) for twin in balances]
             bals = [int(twin[1]) for twin in balances]
             
@@ -3410,11 +3405,19 @@ async def top(ctx, page = "1"):
             else:
                 i = (page-1)*interval
                 puncts = 0
+                desc = ""
                 while puncts < interval and i < len(users):
                     puncts += 1
                     user = discord.utils.get(ctx.guild.members, id = users[i])
-                    top_msg.add_field(name = f"**{i+1})** {user}", value = f"{bals[i]} {token}", inline = False)
+                    desc += f"**{i+1})** {user} • {bals[i]} {token}\n"
                     i += 1
+                    
+                top_msg = discord.Embed(
+                    title = "📊 Топ участников",
+                    description = desc,
+                    color = discord.Color.blue()
+                )
+                
                 top_msg.set_footer(text = f"Page {page}/{page_num}")
                 await ctx.send(embed = top_msg)
 
