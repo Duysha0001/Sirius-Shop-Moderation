@@ -508,7 +508,7 @@ def spamm(guild, user, message):
     global message_buffer
     
     text=message.content
-    now=datetime.datetime.now()
+    now=datetime.datetime.utcnow()
     weight=len(text)
     
     new_user={
@@ -767,7 +767,7 @@ async def setup_mute(guild):
     
 async def save_task(mode, guild, member, raw_delta):
     delta=datetime.timedelta(seconds=raw_delta)
-    now=datetime.datetime.now()
+    now=datetime.datetime.utcnow()
     future=now+delta
     int_fl=all_ints(str(future))
     future_list=[str(elem) for elem in int_fl[0:len(int_fl)-1]]
@@ -790,7 +790,7 @@ async def closest_inactive_task():
         future_raw=[int(elem) for elem in future_raw_str]
         
         future=datetime_from_list(future_raw)
-        now=datetime.datetime.now()
+        now=datetime.datetime.utcnow()
         min_delta=future-now
         
         for file in raw_tasks:
@@ -820,7 +820,7 @@ async def clean_past_tasks():
         future_raw=task[last-6: last]
         
         future=datetime_from_list(future_raw)
-        now=datetime.datetime.now()
+        now=datetime.datetime.utcnow()
         if future<=now:
             mode=task[1]
             guild_id=task[2]
@@ -962,7 +962,7 @@ async def read_message(channel, user, t_out):
 
 async def save_giveaway(guild, message, winner_num, host_user, prize, raw_delta):
     delta=datetime.timedelta(seconds=raw_delta)
-    now=datetime.datetime.now()
+    now=datetime.datetime.utcnow()
     future=now+delta
     int_fl=all_ints(str(future))
     future_list=[str(elem) for elem in int_fl[0:len(int_fl)-1]]
@@ -1029,7 +1029,7 @@ async def closest_giveaway():
     files=await get_raw_data("giveaways", ["off"])
     out="Error"
     if files!="Error":
-        now=datetime.datetime.now()
+        now=datetime.datetime.utcnow()
         
         data=to_list(files[0].content)
         future_str=data[len(data)-6:len(data)]
@@ -1072,7 +1072,7 @@ async def clean_past_giveaways():
     files=await get_raw_folder("giveaways")
     out=[]
     if files!="Error":
-        now=datetime.datetime.now()
+        now=datetime.datetime.utcnow()
         for file in files:
             data=to_list(file.content)
             
