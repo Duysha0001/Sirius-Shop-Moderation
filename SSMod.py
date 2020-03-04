@@ -2169,29 +2169,28 @@ async def embed(ctx, *, raw_text):
     if col!=[]:
         col=col[0].lower()
     else:
-        col="None"
+        col = "default"
     
-    col_names=["red", "blue", "green", "gold", "teal", "magenta", "purple", "blurple", "dark_blue", "dark_red", "black", "white"]
-    colors=[discord.Color.red(),
-            discord.Color.blue(),
-            discord.Color.green(),
-            discord.Color.gold(),
-            discord.Color.teal(),
-            discord.Color.magenta(),
-            discord.Color.purple(),
-            discord.Color.blurple(),
-            discord.Color.dark_blue(),
-            discord.Color.dark_red(),
-            discord.Color.from_rgb(0, 0, 0),
-            discord.Color.from_rgb(254, 254, 254)
-            ]
-    col_chosen=discord.Color.dark_grey()
-    
-    for i in range(len(col_names)):
-        c=col_names[i]
-        if col.find(c)!=-1:
-            col_chosen=colors[i]
-            break
+    colors={
+        "default": discord.Color.default(),
+        "red": discord.Color.red(),
+        "blue": discord.Color.blue(),
+        "green": discord.Color.green(),
+        "gold": discord.Color.gold(),
+        "teal": discord.Color.teal(),
+        "magenta": discord.Color.magenta(),
+        "purple": discord.Color.purple(),
+        "blurple": discord.Color.blurple(),
+        "dark_blue": discord.Color.dark_blue(),
+        "dark_red": discord.Color.dark_red(),
+        "black": discord.Color.from_rgb(0, 0, 0),
+        "white": discord.Color.from_rgb(254, 254, 254)
+    }
+
+    if not col in colors:
+        col = "default"
+    col_chosen = colors[col]
+
     msg=discord.Embed(
         title=list_sum(head),
         description=list_sum(desc),
