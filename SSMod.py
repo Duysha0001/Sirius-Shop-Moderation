@@ -1373,7 +1373,7 @@ async def help(ctx, cmd_name=None):
              "> `##Цвет из списка##` - *подкрашивает рамку цветом из списка*\n"
              "**Список цветов:** `[red, blue, green, gold, teal, magenta, purple, blurple, dark_blue, dark_red, black, white]`\n"
              "**Все эти опции не обязательны, можно отправить хоть пустую рамку**\n"
-             f"**Пример:** {p}embed\n==Server update!==\n=Added **Moderator** role!=\n"),
+             f"**Пример:** {p}embed\n==Server update!==\n--Added \*\*Moderator\*\* role!--\n"),
             ("**Описание:** позволяет настроить приветственные действия с только что присоединившимся участником, имеет 3 раздела настроек\n"
              f"**Применение:** **{p}set_welcome [**раздел**] [**аргументы / delete**]**\n"
              "**Разделы:** `message, channel, roles`\n"
