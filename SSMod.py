@@ -1367,9 +1367,9 @@ async def help(ctx, cmd_name=None):
             ("**Описание:** позволяет отправить сообщение в рамке, имеет ряд настроек кастомизации такого сообщения.\n"
              "**Применение:**\n"
              "> `==Заголовок==` - *создаёт заголовок*\n"
-             "> `=Текст=` - *создаёт основной текст под заголовком*\n"
-             "> `+URL+` - *добавляет мал. картинку в правый верхний угол*\n"
-             "> `++URL++` - *добавляет большую картинку под текстом*\n"
+             "> `--Текст--` - *создаёт основной текст под заголовком*\n"
+             "> `++URL++` - *добавляет мал. картинку в правый верхний угол*\n"
+             "> `&&URL&&` - *добавляет большую картинку под текстом*\n"
              "> `##Цвет из списка##` - *подкрашивает рамку цветом из списка*\n"
              "**Список цветов:** `[red, blue, green, gold, teal, magenta, purple, blurple, dark_blue, dark_red, black, white]`\n"
              "**Все эти опции не обязательны, можно отправить хоть пустую рамку**\n"
@@ -2162,10 +2162,10 @@ async def embed(ctx, *, raw_text):
         ID_str=args[1]
     
     head=detect_isolation(raw_text, "==")
-    desc=detect_isolation(raw_text, "=")
+    desc=detect_isolation(raw_text, "--")
     col=detect_isolation(raw_text, "##")
-    thumb=detect_isolation(raw_text, "+")
-    img=detect_isolation(raw_text, "++")
+    thumb=detect_isolation(raw_text, "++")
+    img=detect_isolation(raw_text, "&&")
     if col!=[]:
         col=col[0].lower()
     else:
