@@ -2166,7 +2166,6 @@ async def embed(ctx, *, raw_text):
     col=detect_isolation(raw_text, "##")
     thumb=detect_isolation(raw_text, "+")
     img=detect_isolation(raw_text, "++")
-    fields=detect_isolation(raw_text, "&&")
     if col!=[]:
         col=col[0].lower()
     else:
@@ -2202,11 +2201,6 @@ async def embed(ctx, *, raw_text):
         msg.set_thumbnail(url=thumb[0])
     if img!=[]:
         msg.set_image(url=img[0])
-    if fields!=[]:
-        for field in fields:
-            f_name=detect_isolation(field, "$$")
-            f_value=detect_isolation(field, ",,")
-            msg.add_field(name=list_sum(f_name), value=list_sum(f_value))
     
     wrong_syntax=False
     if mode.lower()!="edit":
