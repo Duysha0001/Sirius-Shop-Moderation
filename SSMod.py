@@ -3595,15 +3595,8 @@ async def message(ctx, u_search, *, text):
         try:
             await user.send(text)
             await ctx.message.add_reaction("✅")
-            if not ctx.author.id in dms:
+            if not user.id in dms:
                 dms.update((user.id, ctx.author.id))
-        except Exception:
-            reply = discord.Embed(
-                title="💢 Ошибка",
-                description=f"Пользователь {user} закрыл личный канал",
-                color=discord.Color.dark_red()
-            )
-            await ctx.send(embed=reply)
 
 #===================Events==================
 @client.event
