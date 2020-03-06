@@ -388,6 +388,22 @@ def all_ints(word):
         out.append(int(number))
     return out
 
+def carve_int(string):
+    nums = [str(i) for i in range(10)]
+    out = ""
+    found = False
+    for letter in string:
+        if letter in nums:
+            found = True
+            out += letter
+        elif found:
+            break
+    if out == "":
+        out = None
+    else:
+        out = int(out)
+    return out
+
 def datetime_from_list(dt_list):
     dt_list=[int(elem) for elem in dt_list]
     return datetime.datetime(dt_list[0],dt_list[1],dt_list[2],dt_list[3],dt_list[4],dt_list[5])
