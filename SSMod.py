@@ -16,6 +16,7 @@ db_id = 653160213607612426
 
 users_timers={"small": {}, "big": {}}
 message_buffer={}
+dms = {}
 
 mute_role_name="Мут"
 
@@ -199,7 +200,6 @@ def c_partially(data_1, ethalone):
 
 #========Databse functions=======
 async def post_data(folder, data_list):
-    global db_id
     db_server=client.get_guild(db_id)
     
     data_raw=to_raw(data_list)
@@ -217,7 +217,6 @@ async def post_data(folder, data_list):
         await folder.send(data_raw)
     
 async def get_data(folder, key_words):
-    global db_id
     db_server=client.get_guild(db_id)
     
     folders=[c.name for c in db_server.channels]
@@ -239,7 +238,6 @@ async def get_data(folder, key_words):
             return open_folder
 
 async def edit_data(folder_name, key_words, full_edit_list):
-    global db_id
     db_server=client.get_guild(db_id)
     edit_raw=to_raw(full_edit_list)
     
@@ -261,7 +259,6 @@ async def edit_data(folder_name, key_words, full_edit_list):
             return "Error"
             
 async def delete_data(folder, key_words):
-    global db_id
     db_server=client.get_guild(db_id)
     
     folders=[c.name for c in db_server.channels]
@@ -282,7 +279,6 @@ async def delete_data(folder, key_words):
             return "Error"
             
 async def delete_folder(folder):
-    global db_id
     db_server=client.get_guild(db_id)
     
     folders=[c.name for c in db_server.channels]
@@ -294,7 +290,6 @@ async def delete_folder(folder):
         await folder.delete()
         
 async def get_folder(folder):
-    global db_id
     db_server=client.get_guild(db_id)
     
     folders=[c.name for c in db_server.channels]
@@ -309,7 +304,6 @@ async def get_folder(folder):
         return folder_list
 
 async def get_raw_folder(folder):
-    global db_id
     db_server=client.get_guild(db_id)
     
     folders=[c.name for c in db_server.channels]
@@ -358,13 +352,12 @@ async def access_folder(folder):
 
 #========Bot minor tools=======
 def number(s):
-    check=True
-    nums=[str(i) for i in range(10)]
-    for letter in s:
-        if not letter in nums:
-            check=False
-            break
-    return check
+    out = True
+    try:
+        int(s)
+    except ValueError:
+        out = False
+    return out
 
 def word_compare(word, ethalone):
     out=0
@@ -483,7 +476,7 @@ def pages(list_len, interval):
     return out+1 if list_len%interval>0 else out
 
 def expand_delta(delta):
-    delta_sec=delta.seconds
+    delta_sec=delta.seconds + delta.days * 24*3600
     sec=delta_sec%60
     delta_min=delta_sec//60
     mins=delta_min%60
@@ -682,43 +675,50 @@ def paral_sort(names, values):
     return (names, values)
 
 class detect:
-    #===========DEF=========я 
-    def role(guild, raw_search):
-        IDs = all_ints(raw_search)
-        if IDs == []:
-            r = discord.utils.get(guild.roles, name = raw_search)
-        else:
-            ID = IDs[0]
-            r = discord.utils.get(guild.roles, id = ID)
-        if r == None:
-            return "Error"
-        else:
-            return r
+    #===========DEF=========
+    @staticmethod
+    def user(guild, search):
+        ID = carve_int(search)
+        if ID == None:
+            ID = 0
+        user = client.get_user(ID)
+        if user == None:
+            user_pair = search.rsplit("#", maxsplit=1)
+            if len(user_pair) > 1:
+                user = discord.utils.get(guild.members, name=user_pair[0], discriminator=user_pair[1])
+        return user
+
+    @staticmethod
+    def member(guild, search):
+        ID = carve_int(search)
+        if ID == None:
+            ID = 0
+        member = guild.get_member(ID)
+        if member == None:
+            user_pair = search.rsplit("#", maxsplit=1)
+            if len(user_pair) > 1:
+                member = discord.utils.get(guild.members, name=user_pair[0], discriminator=user_pair[1])
+        return member
     
-    def channel(guild, raw_search):
-        IDs = all_ints(raw_search)
-        if IDs == []:
-            c = discord.utils.get(guild.channels, name = raw_search)
-        else:
-            ID = IDs[0]
-            c = discord.utils.get(guild.channels, id = ID)
-        if c == None:
-            return "Error"
-        else:
-            return c
+    @staticmethod
+    def channel(guild, search):
+        ID = carve_int(search)
+        if ID == None:
+            ID = 0
+        channel = guild.get_channel(ID)
+        return channel
     
-    def member(guild, raw_search):
-        IDs = all_ints(raw_search)
-        if IDs == []:
-            m = None
-        else:
-            ID = IDs[0]
-            m = discord.utils.get(guild.members, id = ID)
-        if m == None:
-            return "Error"
-        else:
-            return m
+    @staticmethod
+    def role(guild, search):
+        ID = carve_int(search)
+        if ID == None:
+            ID = 0
+        role = guild.get_role(ID)
+        if role == None:
+            role = discord.utils.get(guild.roles, name=search)
+        return role
     
+    @staticmethod
     def emoji(guild, raw_search):
         out="Error"
         for emoji in guild.emojis:
@@ -730,6 +730,7 @@ class detect:
                 out=raw_search
         return out
     #======ASYNC DEF=======
+    @staticmethod
     async def message(channel_id, message_id):
         channel=client.get_channel(int(channel_id))
         if channel==None:
@@ -1338,7 +1339,8 @@ async def help(ctx, cmd_name=None):
                         f"23) **{p}set_token [**Эмодзи**]** - *настраивает валюту*\n"
                         f"24) **{p}auto_pay_role [**Со скольки токенов давать / delete**] [**Роль**]** - *настраивает авто-роль за токены*\n"
                         f"25) **{p}auto_remove_role [**Со скольки токенов снимать / delete**] [**Роль**]** - *настраивает авто снятие роли за токены*\n"
-                        f"26) **{p}auto_role_info** - *список настроенных ролей*\n")
+                        f"26) **{p}auto_role_info** - *список настроенных ролей*\n"
+                        f"27) **{p}message @User Текст** - *написать в ЛС участнику*\n")
         user_help_list=(f"1) **{p}search [**Запрос/ID**]**\n"
                         f"2) **{p}warns [**Участник**]** - *варны участника*\n"
                         f"3) **{p}server_warns** - *все участники с варнами*\n"
@@ -3128,9 +3130,7 @@ async def bannahoy(ctx, raw_user=None, raw_mod=None, *, reason="не указа�
                     color=discord.Color.dark_red()
                 )
                 await ctx.send(embed=log)
-    
 
-    
 @client.command()
 async def msg(ctx, *, text="None"): #new
     await ctx.send(text)
@@ -3559,7 +3559,36 @@ async def auto_role_info(ctx):
         color = discord.Color.blue()
     )
     await ctx.send(embed = screen)
-    
+
+@client.command(aliases = ["msg", "mail", "чат", "сообщение"])
+async def message(ctx, u_search, *, text):
+    global dms
+
+    user = detect.user(ctx.guild, u_search)
+    if not has_permissions(ctx.author, ["administrator"]):
+        reply = lack_of_perms_msg(["Администратор"])
+        await ctx.send(embed=reply)
+    elif user == None:
+        reply = discord.Embed(
+            title="💢 Ошибка",
+            description=f"Вы ввели {u_search}, подразумевая пользователя, но он не был найден",
+            color=discord.Color.dark_red()
+        )
+        await ctx.send(embed=reply)
+    else:
+        try:
+            await user.send(text)
+            await ctx.message.add_reaction("✅")
+            if not ctx.author.id in dms:
+                dms.update((user.id, ctx.author.id))
+        except Exception:
+            reply = discord.Embed(
+                title="💢 Ошибка",
+                description=f"Пользователь {user} закрыл личный канал",
+                color=discord.Color.dark_red()
+            )
+            await ctx.send(embed=reply)
+
 #===================Events==================
 @client.event
 async def on_member_join(member):
@@ -3661,8 +3690,33 @@ async def on_message(message):
                     client.loop.create_task(go_delete(message))
             
             spammed=False
+        
+        if message.guild == None:
+            victim_id = message.author.id
+            if victim_id in dms:
+                spy_id = dms[victim_id]
+                spy = client.get_user(spy_id)
+
+                mail = discord.Embed(
+                    description=message.content
+                )
+                mail.set_author(name=f"{message.author}", icon_url=f"{message.author.avatar_url}")
+
+                await polite_send(spy, "", mail)
 
 #=====================Errors==========================
+@message.error
+async def message_error(ctx, error):
+    
+    if isinstance(error, commands.MissingRequiredArgument):
+        reply=discord.Embed(
+            title="❌ Недостаточно аргументов",
+            description=(f"Формат: `{prefix}{ctx.command.name} @Участник Текст`\n"
+                         f"Например: `{prefix}{ctx.command.name} @Участник Привет`"),
+            color=discord.Color.dark_red()
+        )
+        await ctx.send(embed=reply)
+
 @mute.error
 async def mute_error(ctx, error):
     
