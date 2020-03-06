@@ -3597,6 +3597,8 @@ async def message(ctx, u_search, *, text):
             await ctx.message.add_reaction("✅")
             if not user.id in dms:
                 dms.update((user.id, ctx.author.id))
+        except Exception:
+            pass
 
 #===================Events==================
 @client.event
@@ -3711,7 +3713,10 @@ async def on_message(message):
                 )
                 mail.set_author(name=f"{message.author}", icon_url=f"{message.author.avatar_url}")
 
-                await polite_send(spy, "", mail)
+                try:
+                    await spy.send(embed=mail)
+                except Exception:
+                    pass
 
 #=====================Errors==========================
 @message.error
