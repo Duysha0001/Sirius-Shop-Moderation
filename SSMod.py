@@ -3675,34 +3675,35 @@ async def on_message(message):
     await client.process_commands(message)
     
     if not message.author.bot:
-        modes = await get_data("on-off", [str(message.guild), "antispam"])
-        if modes == "Error":
-            mode = 1
-        else:
-            mode = int(modes[0][0])
-        
-        if mode == 1:
-            res=spamm(message.guild, message.author, message)
-        
-            if res[0]:
-                client.loop.create_task(do_mute(message.guild, message.author, client.user, 3600, "спам"))
-                
-                async def go_delete(db_msg):
-                    msg_id=db_msg["id"]
-                    channel_id=db_msg["channel_id"]
-                    message = await detect.message(channel_id, msg_id)
-                    if message!="Error":
-                        await message.delete()
-                    return
-                
-                messages=res[1]
-                
-                for message in messages:
-                    client.loop.create_task(go_delete(message))
+        if message.guild != None:
+            modes = await get_data("on-off", [str(message.guild), "antispam"])
+            if modes == "Error":
+                mode = 1
+            else:
+                mode = int(modes[0][0])
             
-            spammed=False
+            if mode == 1:
+                res=spamm(message.guild, message.author, message)
+            
+                if res[0]:
+                    client.loop.create_task(do_mute(message.guild, message.author, client.user, 3600, "спам"))
+                    
+                    async def go_delete(db_msg):
+                        msg_id=db_msg["id"]
+                        channel_id=db_msg["channel_id"]
+                        message = await detect.message(channel_id, msg_id)
+                        if message!="Error":
+                            await message.delete()
+                        return
+                    
+                    messages=res[1]
+                    
+                    for message in messages:
+                        client.loop.create_task(go_delete(message))
+                
+                spammed=False
         
-        if message.guild == None:
+        else:
             victim_id = message.author.id
             if victim_id in dms:
                 spy_id = dms[victim_id]
