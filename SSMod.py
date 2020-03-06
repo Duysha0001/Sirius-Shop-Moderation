@@ -3596,7 +3596,7 @@ async def message(ctx, u_search, *, text):
             await user.send(text)
             await ctx.message.add_reaction("✅")
             if not user.id in dms:
-                dms.update((user.id, ctx.author.id))
+                dms.update([(user.id, ctx.author.id)])
         except Exception:
             pass
 
