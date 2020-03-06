@@ -3560,7 +3560,7 @@ async def auto_role_info(ctx):
     )
     await ctx.send(embed = screen)
 
-@client.command(aliases = ["msg", "mail", "чат", "сообщение"])
+@client.command(aliases = ["mail", "чат", "сообщение"])
 async def message(ctx, u_search, *, text):
     global dms
 
