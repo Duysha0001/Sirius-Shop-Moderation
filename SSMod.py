@@ -1051,7 +1051,10 @@ async def closest_giveaway():
         data=to_list(files[0].content)
         future_str=data[len(data)-6:len(data)]
         future=datetime_from_list(future_str)
-        min_delta=future-now
+        if future <= now:
+            min_delta = 0
+        else:
+            min_delta = future - now
         
         guild_id=int(data[1])
         channel_id=int(data[5])
@@ -1067,7 +1070,10 @@ async def closest_giveaway():
             
             future_str=data[len(data)-6:len(data)]
             future=datetime_from_list(future_str)
-            delta=future-now
+            if future <= now:
+                delta = 0
+            else:
+                delta = future - now
             
             if delta<min_delta:
                 min_delta=delta
@@ -1097,11 +1103,11 @@ async def clean_past_giveaways():
             future_raw=data[last-6:last]
             future=datetime_from_list(future_raw)
             
-            if future<=now:
-                message_id=int(data[2])
-                channel_id=int(data[5])
+            if future <= now:
+                message_id = int(data[2])
+                channel_id = int(data[5])
                 message = await detect.message(channel_id, message_id)
-                if message!="Error":
+                if message != "Error":
                     out.append(message)
     return out
     
@@ -3988,7 +3994,7 @@ async def giveaway_refresh():
     await client.wait_until_ready()
     await reset_giveaways()
     while True:
-        messages=await clean_past_giveaways()
+        messages = await clean_past_giveaways()
         for msg in messages:
             await finish_giveaway(msg)
         
