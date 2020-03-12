@@ -1,2 +1,2 @@
 # Sirius-Shop-Moderation
-upd
+Bruh
