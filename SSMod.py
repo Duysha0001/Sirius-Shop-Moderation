@@ -1052,7 +1052,7 @@ async def closest_giveaway():
         future_str=data[len(data)-6:len(data)]
         future=datetime_from_list(future_str)
         if future <= now:
-            min_delta = 0
+            min_delta = datetime.timedelta(seconds=0)
         else:
             min_delta = future - now
         
@@ -1071,7 +1071,7 @@ async def closest_giveaway():
             future_str=data[len(data)-6:len(data)]
             future=datetime_from_list(future_str)
             if future <= now:
-                delta = 0
+                delta = datetime.timedelta(seconds=0)
             else:
                 delta = future - now
             
@@ -1099,7 +1099,7 @@ async def clean_past_giveaways():
         for file in files:
             data=to_list(file.content)
             
-            last=len(data)
+            last = len(data)
             future_raw=data[last-6:last]
             future=datetime_from_list(future_raw)
             
@@ -3998,7 +3998,7 @@ async def giveaway_refresh():
         for msg in messages:
             await finish_giveaway(msg)
         
-        active_g=await closest_giveaway()
+        active_g = await closest_giveaway()
         if active_g=="Error":
             break
         else:
