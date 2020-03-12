@@ -1076,7 +1076,7 @@ async def closest_giveaway():
                 message_id=int(data[2])
                 
                 message = await detect.message(channel_id, message_id)
-                out=[message, min_delta.seconds]
+                out=[message, min_delta.seconds + min_delta.days * 24*3600]
                 
                 pinned=file
                 
